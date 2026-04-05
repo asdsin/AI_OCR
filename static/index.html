@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PLC OCR Agent</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;font-size:14px;padding-bottom:60px}
+.hdr{background:#1e293b;padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #334155;position:sticky;top:0;z-index:10}
+.hdr h1{font-size:16px;font-weight:700;flex:1}
+.st{font-size:11px;padding:3px 8px;border-radius:10px}
+.st.on{background:#065f46;color:#6ee7b7}.st.off{background:#7f1d1d;color:#fca5a5}
+
+.tabs{display:flex;background:#1e293b;border-bottom:1px solid #334155;position:sticky;top:42px;z-index:10}
+.tab{flex:1;padding:8px 4px;text-align:center;font-size:11px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.active{color:#60a5fa;border-bottom-color:#60a5fa;font-weight:700}
+
+.pnl{display:none;padding:12px}.pnl.active{display:block}
+.card{background:#1e293b;border-radius:10px;padding:12px;margin-bottom:10px}
+.card-title{font-size:13px;font-weight:700;margin-bottom:8px;color:#94a3b8}
+
+.btn{display:block;width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:6px;text-align:center}
+.btn-sm{display:inline-block;width:auto;padding:6px 12px;font-size:12px;margin:2px}
+.bp{background:#3b82f6;color:#fff}.bp:active{background:#2563eb}
+.bs{background:#334155;color:#e2e8f0}.bd{background:#ef4444;color:#fff}
+.bg{background:#059669;color:#fff}.by{background:#d97706;color:#fff}
+.btn:disabled{opacity:.4}
+
+.inp{width:100%;padding:10px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:14px;margin-bottom:6px}
+.inp:focus{outline:none;border-color:#3b82f6}
+select.inp{appearance:auto}
+label{display:block;font-size:12px;color:#94a3b8;margin-bottom:2px;margin-top:6px}
+label:first-child{margin-top:0}
+
+.badge{padding:3px 8px;border-radius:6px;font-size:12px;font-weight:700;display:inline-block}
+.badge.ok{background:#065f46;color:#6ee7b7}.badge.warning{background:#78350f;color:#fbbf24}.badge.ng{background:#7f1d1d;color:#fca5a5}
+.srow{display:flex;gap:6px;margin-bottom:10px}
+.sbox{flex:1;background:#0f172a;border-radius:6px;padding:10px;text-align:center}
+.sbox .n{font-size:22px;font-weight:700}.sbox .l{font-size:10px;color:#94a3b8}
+
+/* 검색 */
+.search-box{position:relative;margin-bottom:10px}
+.search-box input{width:100%;padding:10px 10px 10px 36px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px}
+.search-box .icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#64748b}
+.sr-item{background:#1e293b;border-radius:8px;padding:10px;margin-bottom:4px;cursor:pointer}
+.sr-item:active{background:#1e3a5f}
+
+/* 트리 */
+.path{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.path-chip{background:#334155;padding:4px 10px;border-radius:12px;font-size:11px;display:flex;align-items:center;gap:4px}
+.path-chip .x{cursor:pointer;color:#ef4444;font-weight:700}
+.tree-item{display:flex;align-items:center;padding:10px;background:#0f172a;border-radius:6px;margin-bottom:4px;cursor:pointer;gap:8px}
+.tree-item:active{background:#1e3a5f}
+.tree-icon{font-size:18px;width:28px;text-align:center}
+.tree-info{flex:1}.tree-info .name{font-weight:600}.tree-info .sub{font-size:11px;color:#64748b}
+.tree-add{border:1px dashed #475569;justify-content:center;color:#64748b}
+
+/* 시각 분석 오버레이 */
+.analyze-wrap{position:relative;width:100%;margin-bottom:10px;border-radius:10px;overflow:hidden}
+.analyze-wrap img{width:100%;display:block}
+.det-marker{position:absolute;border:2px solid rgba(59,130,246,0.7);border-radius:3px;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:rgba(255,255,255,0.9);text-shadow:0 1px 2px rgba(0,0,0,0.8)}
+.det-marker.numeric{border-color:rgba(59,130,246,0.8);background:rgba(59,130,246,0.15)}
+.det-marker.text{border-color:rgba(148,163,184,0.5);background:rgba(148,163,184,0.1);font-size:8px}
+.det-marker.selected{border-color:#22c55e!important;background:rgba(34,197,94,0.3)!important;box-shadow:0 0 8px rgba(34,197,94,0.5)}
+.det-marker:active{transform:scale(1.1)}
+
+/* 선택 항목 */
+.sel-item{background:#0f172a;border-radius:6px;padding:10px;margin-bottom:4px;border-left:3px solid #22c55e}
+.sel-head{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.sel-val{font-size:18px;font-weight:700;color:#6ee7b7}
+.sel-text{font-size:11px;color:#94a3b8;flex:1}
+
+/* 판정 결과 */
+.vrow{display:flex;align-items:center;padding:8px;background:#0f172a;border-radius:6px;margin-bottom:3px;gap:6px}
+.vnum{font-size:18px;font-weight:700;min-width:55px}
+.vnum.ok{color:#6ee7b7}.vnum.warning{color:#fbbf24}.vnum.ng{color:#fca5a5}
+
+.camera-area{width:100%;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden;margin-bottom:10px;position:relative}
+.camera-area video,.camera-area img{width:100%;height:100%;object-fit:contain}
+.upload-area{border:2px dashed #475569;border-radius:10px;padding:20px;text-align:center;cursor:pointer;margin-bottom:10px}
+.upload-area input{display:none}
+
+.loading{text-align:center;padding:30px}
+.spinner{display:inline-block;width:28px;height:28px;border:3px solid #334155;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:20;display:none;align-items:flex-end;justify-content:center}
+.modal-bg.show{display:flex}
+.modal{background:#1e293b;border-radius:12px 12px 0 0;width:100%;max-width:500px;max-height:85vh;overflow-y:auto;padding:16px}
+.modal h3{font-size:16px;margin-bottom:12px}
+
+.step-bar{display:flex;gap:4px;margin-bottom:12px}
+.step{flex:1;text-align:center;padding:6px;border-radius:6px;font-size:11px;background:#0f172a;color:#64748b}
+.step.active{background:#1e3a5f;color:#60a5fa;font-weight:700}
+.step.done{background:#065f46;color:#6ee7b7}
+/* 라이브 카메라 */
+.live-cam{position:relative;width:100%;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden;margin-bottom:8px}
+.live-cam video{width:100%;height:100%;object-fit:cover}
+.live-cam canvas{display:none}
+.live-cam .cam-overlay{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none}
+.live-cam .qr-guide{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:200px;border:3px solid rgba(59,130,246,0.6);border-radius:12px}
+.live-cam .qr-guide::before{content:'QR을 여기에 맞추세요';position:absolute;bottom:-28px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.7);font-size:11px;white-space:nowrap}
+.live-cam .cam-status{position:absolute;top:8px;left:8px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700}
+.cam-status.scanning{background:rgba(59,130,246,0.8);color:#fff;animation:pulse 1.5s infinite}
+.cam-status.found{background:rgba(34,197,94,0.9);color:#fff}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+.cam-btn-row{display:flex;gap:6px;margin-bottom:8px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+</head>
+<body>
+
+<div class="hdr">
+  <span style="font-size:20px">🏭</span>
+  <h1>PLC OCR Agent</h1>
+  <span id="stBadge" class="st off">...</span>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="sw('setup')">📍 위치</div>
+  <div class="tab" onclick="sw('ref')">📐 기준설정</div>
+  <div class="tab" onclick="sw('judge')">📸 판정</div>
+  <div class="tab" onclick="sw('result')">📊 결과</div>
+</div>
+
+<!-- ═══ 1. 위치 + QR 관리 ═══ -->
+<div id="p-setup" class="pnl active">
+  <div class="search-box">
+    <span class="icon">🔍</span>
+    <input id="searchInput" placeholder="업체, 라인, 공정, 설비, QR 검색..." oninput="onSearch(this.value)">
+  </div>
+  <div id="searchResults" style="display:none"></div>
+  <div id="treeSection">
+    <div class="path" id="pathBar"></div>
+    <div id="treeView"></div>
+  </div>
+  <!-- 설비 선택 시 QR 포인트 관리 영역 -->
+  <div id="qrSection" style="display:none">
+    <div class="card">
+      <div class="card-title">📟 <span id="qrEquipName"></span></div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:8px" id="qrEquipMeta"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🏷️ QR 포인트 <button class="btn-sm bg" onclick="openQrAdd()">+ QR 추가</button></div>
+      <div id="qrList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 2. 기준설정 (시각 분석) ═══ -->
+<div id="p-ref" class="pnl">
+  <div class="step-bar">
+    <div class="step" id="st1">① 기준 사진</div>
+    <div class="step" id="st2">② 항목 선택</div>
+    <div class="step" id="st3">③ 조건 입력</div>
+  </div>
+
+  <!-- Step 1: 기준 사진 촬영 (라이브 카메라) -->
+  <div id="refStep1">
+    <div class="card">
+      <div class="card-title">📐 기준 사진 촬영</div>
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:4px" id="refEquipInfo">QR 포인트를 먼저 선택하세요 (위치 탭)</div>
+      <div style="font-size:13px;font-weight:700;color:#60a5fa" id="refQrInfo"></div>
+    </div>
+
+    <!-- 카메라 뷰 -->
+    <div id="refCamView" style="display:none">
+      <div class="live-cam">
+        <video id="refVideo" autoplay playsinline muted></video>
+        <canvas id="refCanvas"></canvas>
+        <div class="cam-status scanning">PLC 화면을 맞추세요</div>
+      </div>
+      <div class="cam-btn-row">
+        <button class="btn bd" style="flex:1" onclick="captureRef()">📸 촬영</button>
+        <button class="btn bs" style="flex:1" onclick="stopRefCam()">닫기</button>
+      </div>
+    </div>
+
+    <!-- 촬영 미리보기 -->
+    <div id="refPrev" style="display:none">
+      <div class="live-cam"><img id="refPrevImg" style="object-fit:contain"></div>
+      <div class="cam-btn-row">
+        <button class="btn bp" style="flex:1" onclick="submitRef()">🔍 분석 시작</button>
+        <button class="btn bs" style="flex:1" onclick="retakeRef()">↩️ 다시 촬영</button>
+      </div>
+    </div>
+
+    <!-- 시작 버튼 -->
+    <div id="refStartBtns">
+      <button class="btn bp" onclick="startRefCam()">📷 카메라로 촬영</button>
+      <div class="upload-area" onclick="document.getElementById('refFile').click()" style="margin-top:4px">
+        <input type="file" id="refFile" accept="image/*" capture="environment" onchange="handleRefFile(event)">
+        <span style="font-size:12px;color:#64748b">📁 파일로 업로드</span>
+      </div>
+    </div>
+
+    <div id="refAnalyzing" class="loading" style="display:none">
+      <div class="spinner"></div>
+      <p style="margin-top:8px;color:#94a3b8">화면 분석 중...</p>
+    </div>
+  </div>
+
+  <!-- Step 2: 항목 선택 (시각 오버레이) -->
+  <div id="refStep2" style="display:none">
+    <div class="card" style="padding:8px">
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">📌 판정할 항목을 터치하세요 (수치 = 파랑, 선택됨 = 초록)</div>
+      <div style="display:flex;gap:4px;margin-bottom:6px">
+        <button class="btn-sm bp" onclick="selectAllNumeric()">수치 전체선택</button>
+        <button class="btn-sm bs" onclick="clearSelection()">선택 해제</button>
+      </div>
+    </div>
+    <div class="analyze-wrap" id="analyzeWrap"></div>
+    <div id="selectedList"></div>
+    <button class="btn bg" onclick="goStep3()" id="btnStep3" disabled>선택 완료 → 조건 입력</button>
+  </div>
+
+  <!-- Step 3: 조건 입력 -->
+  <div id="refStep3" style="display:none">
+    <div class="card">
+      <div class="card-title">⚙️ 판정 조건 설정</div>
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">선택한 항목의 OK/NG 조건을 입력하세요</div>
+    </div>
+    <div id="conditionList"></div>
+    <button class="btn bg" onclick="saveProfile()">💾 프로필 저장</button>
+    <button class="btn bs" onclick="goStep2()">← 항목 다시 선택</button>
+  </div>
+</div>
+
+<!-- ═══ 3. 판정 ═══ -->
+<div id="p-judge" class="pnl">
+  <div class="card">
+    <div class="card-title">📸 판정</div>
+    <div id="judgeInfo" style="font-size:12px;color:#64748b">카메라로 QR을 스캔하거나 수동 입력하세요</div>
+  </div>
+
+  <!-- 모드 선택 -->
+  <div class="cam-btn-row" id="judgeModeBar">
+    <button class="btn bp" style="flex:1" onclick="startJudgeQR()">🏷️ QR 스캔</button>
+    <button class="btn bg" style="flex:1" onclick="startJudgeCam()">📷 PLC 촬영</button>
+    <button class="btn bs" style="flex:0 0 auto;padding:12px 16px" onclick="toggleManualQr()">⌨️</button>
+  </div>
+  <div id="manualQrRow" style="display:none;margin-bottom:8px">
+    <div style="display:flex;gap:6px">
+      <input class="inp" id="judgeQrInput" placeholder="QR 코드 수동 입력..." style="flex:1;margin:0">
+      <button class="btn-sm bp" onclick="judgeByQr()">확인</button>
+    </div>
+  </div>
+
+  <!-- QR 스캔 모드 -->
+  <div id="judgeQrScan" style="display:none">
+    <div class="live-cam">
+      <video id="qrVideo" autoplay playsinline muted></video>
+      <canvas id="qrCanvas"></canvas>
+      <div class="cam-overlay"><div class="qr-guide"></div></div>
+      <div class="cam-status scanning" id="qrStatus">QR 스캔 중...</div>
+    </div>
+    <button class="btn bs" onclick="stopJudgeCam()">닫기</button>
+  </div>
+
+  <!-- PLC 촬영 모드 -->
+  <div id="judgeCamMode" style="display:none">
+    <div class="live-cam">
+      <video id="plcVideo" autoplay playsinline muted></video>
+      <canvas id="plcCanvas"></canvas>
+      <div class="cam-status scanning" id="plcStatus">촬영 대기</div>
+    </div>
+    <div class="cam-btn-row">
+      <button class="btn bd" style="flex:1" onclick="capturePlc()">📸 촬영</button>
+      <button class="btn bs" style="flex:1" onclick="stopJudgeCam()">닫기</button>
+    </div>
+  </div>
+
+  <!-- 촬영 결과 미리보기 -->
+  <div id="judgePrev" style="display:none">
+    <div class="live-cam"><img id="judgePrevImg" style="object-fit:contain"></div>
+    <div class="cam-btn-row">
+      <button class="btn bp" style="flex:1" onclick="submitJudge()">🔍 판정 시작</button>
+      <button class="btn bs" style="flex:1" onclick="retakeJudge()">↩️ 다시 촬영</button>
+    </div>
+  </div>
+
+  <!-- 파일 업로드 폴백 -->
+  <div class="upload-area" onclick="document.getElementById('judgeFile').click()" id="judgeUpload" style="margin-top:4px">
+    <input type="file" id="judgeFile" accept="image/*" capture="environment" onchange="handleJudgeFile(event)">
+    <span style="font-size:12px;color:#64748b">📁 파일로 판정</span>
+  </div>
+
+  <div id="judging" class="loading" style="display:none">
+    <div class="spinner"></div><p style="margin-top:8px;color:#94a3b8">판정 중...</p>
+  </div>
+</div>
+
+<!-- ═══ 4. 결과 ═══ -->
+<div id="p-result" class="pnl">
+  <div id="noRes" style="text-align:center;padding:30px;color:#64748b">판정 결과가 없습니다</div>
+  <div id="resArea" style="display:none"></div>
+</div>
+
+<!-- 모달 -->
+<div class="modal-bg" id="modal1"><div class="modal"><h3 id="m1Title"></h3><div id="m1Body"></div>
+  <div style="display:flex;gap:6px;margin-top:12px"><button class="btn bp" style="flex:1" onclick="saveM1()">저장</button><button class="btn bs" style="flex:1" onclick="closeM1()">취소</button></div>
+</div></div>
+
+<script>
+// API 서버 주소 — 같은 서버에서 서빙되므로 origin 사용
+const API=location.origin;
+let navStack=[], selEquipId=null, selEquipName='';
+let selQrId=null, selQrCode='', selQrName='';
+let analyzeData=null, selectedItems=new Set(), profileRules=[];
+window._searchResults=[];
+
+checkSrv();
+
+function sw(t){
+  // 탭 전환 시 카메라 정리
+  _closeCam();
+  if(_qrScanTimer){clearInterval(_qrScanTimer);_qrScanTimer=null}
+
+  ['setup','ref','judge','result'].forEach((n,i)=>{
+    document.querySelectorAll('.tab')[i].classList.toggle('active',n===t);
+  });
+  document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('active'));
+  document.getElementById('p-'+t).classList.add('active');
+  if(t==='setup'){document.getElementById('qrSection').style.display=selEquipId?'block':'none';renderTree()}
+}
+
+async function checkSrv(){
+  const b=document.getElementById('stBadge');
+  try{
+    const ctrl=new AbortController();
+    setTimeout(()=>ctrl.abort(),5000);
+    const r=await fetch(API+'/health',{signal:ctrl.signal});
+    const d=await r.json();
+    b.textContent='연결됨';b.className='st on';
+  }catch(e){
+    b.textContent='연결실패';b.className='st off';
+    console.error('Server check failed:',API,e);
+  }
+}
+async function api(p,o){
+  try{
+    const r=await fetch(API+p,o);
+    if(!r.ok){const t=await r.text();throw new Error(`${r.status}: ${t.slice(0,100)}`);}
+    return r.json();
+  }catch(e){
+    console.error('API Error:',API+p,e);
+    throw e;
+  }
+}
+
+// ═══ 검색 ═══
+let sTimer=null;
+function onSearch(q){clearTimeout(sTimer);const sr=document.getElementById('searchResults'),ts=document.getElementById('treeSection');
+  if(!q){sr.style.display='none';ts.style.display='block';return}
+  sTimer=setTimeout(()=>doSearch(q),300)}
+async function doSearch(q){
+  const sr=document.getElementById('searchResults'),ts=document.getElementById('treeSection');
+  sr.style.display='block';ts.style.display='none';
+  try{
+    const res=await api(`/api/master/search?q=${encodeURIComponent(q)}`);
+    window._searchResults=res;
+    if(!res.length){sr.innerHTML='<div style="text-align:center;padding:20px;color:#64748b">결과 없음</div>';return}
+    const icons={company:'🏢',division:'🏭',line:'🔧',process:'⚙️',equipment:'📟',qr_point:'🏷️'};
+    const labels={company:'업체',division:'사업부',line:'라인',process:'공정',equipment:'설비',qr_point:'QR'};
+    sr.innerHTML=res.map((r,i)=>{
+      const hasProfile=r.qr_point?.has_profile;
+      const profileBadge=r.match_level==='qr_point'?(hasProfile?'<span style="color:#6ee7b7;font-size:10px"> ✅설정됨</span>':'<span style="color:#fca5a5;font-size:10px"> ⚠미설정</span>'):'';
+      return `<div class="sr-item" onclick="pickSR(${i})" style="cursor:pointer">
+        <div style="font-size:11px;color:#64748b">${r.breadcrumb}</div>
+        <div>${icons[r.match_level]||''} <b>${r.match_field}</b>${profileBadge}
+        <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#334155;color:#94a3b8;margin-left:4px">${labels[r.match_level]||r.match_level}${r.equipment?' · '+r.equipment.plc_type:''}</span></div>
+      </div>`;
+    }).join('');
+  }catch(e){sr.innerHTML=`<div style="color:#fca5a5;padding:12px">${e.message}</div>`}
+}
+function pickSR(i){
+  const r=window._searchResults[i];if(!r)return;
+  navStack=r.path.filter(p=>p.level!=='equipment').map(p=>({level:p.level,id:p.id,name:p.name}));
+  document.getElementById('searchInput').value='';
+  document.getElementById('searchResults').style.display='none';
+  document.getElementById('treeSection').style.display='block';
+
+  if(r.match_level==='qr_point'&&r.qr_point&&r.equipment){
+    selEquipId=r.equipment.id;selEquipName=r.equipment.name;
+    if(r.qr_point.has_profile){
+      quickJudge(r.qr_point.qr_code,r.qr_point.screen_name);
+    } else {
+      selectQr(r.qr_point.id,r.qr_point.qr_code,r.qr_point.screen_name,false);
+    }
+    return;
+  }
+  if(r.match_level==='equipment'&&r.equipment){selectEquip(r.equipment.id,r.equipment.name);return}
+  renderTree();
+}
+
+// ═══ 트리 ═══
+const LEVELS=[
+  {key:'company',label:'업체',icon:'🏢',api:'/api/master/companies',childKey:'division_count'},
+  {key:'division',label:'사업부',icon:'🏭',api:'/api/master/divisions',parentParam:'company_id',childKey:'line_count'},
+  {key:'line',label:'라인',icon:'🔧',api:'/api/master/lines',parentParam:'division_id',childKey:'process_count'},
+  {key:'process',label:'공정',icon:'⚙️',api:'/api/master/processes',parentParam:'line_id',childKey:'equipment_count'},
+  {key:'equipment',label:'설비',icon:'📟',api:'/api/master/equipments',parentParam:'process_id'},
+];
+function curLevel(){return navStack.length}
+async function renderTree(){
+  const lv=curLevel();
+  document.getElementById('pathBar').innerHTML=navStack.map((n,i)=>
+    `<div class="path-chip">${n.name} <span class="x" onclick="navTo(${i})">&times;</span></div>`
+  ).join('<span style="color:#475569;font-size:10px">›</span>');
+  const tv=document.getElementById('treeView');
+  if(lv>=LEVELS.length){tv.innerHTML='';return}
+  const L=LEVELS[lv];
+  let url=L.api;
+  if(L.parentParam&&navStack.length>0)url+=`?${L.parentParam}=${navStack[navStack.length-1].id}`;
+  try{
+    const items=await api(url);
+    let h='';
+    for(const it of items){
+      const sub=it[L.childKey]!=null?`${it[L.childKey]}개`:(it.plc_type||it.equipment_type||'');
+      const click=lv===4?`selectEquip('${it.id}','${(it.name||'').replace(/'/g,"\\'")}')`:`drillDown('${it.id}','${(it.name||it.code).replace(/'/g,"\\'")}')`;
+      h+=`<div class="tree-item" onclick="${click}">
+        <div class="tree-icon">${L.icon}</div>
+        <div class="tree-info"><div class="name">${it.name||it.code}</div><div class="sub">${it.code} ${sub?'· '+sub:''}</div></div>
+        ${lv<4?'<div style="color:#64748b">›</div>':'<div style="font-size:11px;color:#3b82f6">기준설정 →</div>'}
+      </div>`;
+    }
+    h+=`<div class="tree-item tree-add" onclick="openAdd('${L.key}')">+ ${L.label} 추가</div>`;
+    tv.innerHTML=h;
+  }catch(e){
+    tv.innerHTML=`<div style="padding:16px">
+      <div style="color:#fca5a5;margin-bottom:8px">⚠ 연결 실패</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:8px">${e.message}</div>
+      <div style="font-size:11px;color:#475569">서버: ${API}</div>
+      <button class="btn bp" style="margin-top:8px" onclick="renderTree()">재시도</button>
+    </div>`;
+  }
+}
+function drillDown(id,name){navStack.push({level:LEVELS[curLevel()].key,id,name});renderTree()}
+function navTo(i){navStack=navStack.slice(0,i);renderTree()}
+
+function selectEquip(id,name){
+  selEquipId=id;selEquipName=name;
+  selQrId=null;selQrCode='';selQrName='';
+  // QR 포인트 목록 표시
+  document.getElementById('qrSection').style.display='block';
+  document.getElementById('qrEquipName').textContent=name;
+  document.getElementById('qrEquipMeta').textContent=navStack.map(n=>n.name).join(' > ');
+  loadQrPoints();
+}
+
+async function loadQrPoints(){
+  const el=document.getElementById('qrList');
+  try{
+    const qrs=await api(`/api/qr/points/equipment/${selEquipId}`);
+    if(!qrs.length){
+      el.innerHTML='<div style="color:#64748b;font-size:12px;padding:8px">QR 포인트가 없습니다. 추가하세요.</div>';
+      return;
+    }
+    el.innerHTML=qrs.map(q=>{
+      const profileBadge=q.has_profile
+        ?`<span class="badge ok" style="font-size:10px">${q.rules_count}개 항목</span>`
+        :'<span class="badge ng" style="font-size:10px">미설정</span>';
+      return `<div class="tree-item" style="border-left:3px solid ${q.has_profile?'#22c55e':'#64748b'}">
+        <div class="tree-icon">🏷️</div>
+        <div class="tree-info">
+          <div class="name">${q.screen_name}</div>
+          <div class="sub">QR: ${q.qr_code} ${profileBadge}</div>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="btn-sm bp" onclick="selectQr('${q.id}','${q.qr_code}','${q.screen_name.replace(/'/g,"\\'")}',${q.has_profile})">기준설정</button>
+          ${q.has_profile?`<button class="btn-sm bg" onclick="quickJudge('${q.qr_code}','${q.screen_name.replace(/'/g,"\\'")}')">판정</button>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){el.innerHTML=`<div style="color:#fca5a5">${e.message}</div>`}
+}
+
+function selectQr(id,code,name,hasProfile){
+  selQrId=id;selQrCode=code;selQrName=name;
+  const path=navStack.map(n=>n.name).join(' > ')+' > '+selEquipName;
+  document.getElementById('refEquipInfo').innerHTML=`📍 ${path}`;
+  document.getElementById('refQrInfo').textContent=`🏷️ ${name} (QR: ${code})`;
+  if(hasProfile)loadServerProfile(code);
+  setStep(1);
+  sw('ref');
+}
+
+function quickJudge(code,name){
+  selQrCode=code;selQrName=name;
+  loadServerProfile(code);
+  document.getElementById('judgeQrInput').value=code;
+  const path=navStack.map(n=>n.name).join(' > ')+' > '+selEquipName;
+  document.getElementById('judgeInfo').innerHTML=`📍 ${path}<br>🏷️ <b>${name}</b> (QR: ${code}) — <span style="color:#6ee7b7">프로필 로드됨</span>`;
+  sw('judge');
+}
+
+async function loadServerProfile(qrCode){
+  try{
+    const data=await api(`/api/qr/profile/${qrCode}`);
+    profileRules=data.profile?.rules||[];
+  }catch(e){profileRules=[]}
+}
+
+function openQrAdd(){
+  document.getElementById('m1Title').textContent='QR 포인트 추가';
+  document.getElementById('m1Body').innerHTML=`
+    <label>QR 코드 (고유값)</label>
+    <input class="inp" id="qr_code" placeholder="NIR001-SCR">
+    <label>화면 이름</label>
+    <input class="inp" id="qr_screen" placeholder="SCR 전류 화면">
+    <label>설명 (선택)</label>
+    <input class="inp" id="qr_desc" placeholder="상단/하단 8개 히터 그룹 전류">`;
+  document.getElementById('modal1').classList.add('show');
+  addLevel='qr'; // 모달 저장 시 분기용
+}
+
+async function judgeByQr(){
+  const code=document.getElementById('judgeQrInput').value.trim();
+  if(!code){alert('QR 코드를 입력하세요');return}
+  try{
+    const data=await api(`/api/qr/scan/${encodeURIComponent(code)}`);
+    selQrCode=code;selQrName=data.qr_point.screen_name;
+    if(data.has_profile){
+      profileRules=(data.qr_point.profile_data||{}).rules||[];
+      document.getElementById('judgeInfo').innerHTML=`🏷️ <b>${data.qr_point.screen_name}</b> (${data.equipment?.name||''})<br><span style="color:#6ee7b7">${data.profile_rules_count}개 판정항목 로드됨</span>`;
+    }else{
+      document.getElementById('judgeInfo').innerHTML=`🏷️ <b>${data.qr_point.screen_name}</b> — <span style="color:#fca5a5">프로필 미설정 → 기준설정 탭에서 설정하세요</span>`;
+    }
+  }catch(e){
+    document.getElementById('judgeInfo').innerHTML=`<span style="color:#fca5a5">QR '${code}' 미등록</span>`;
+  }
+}
+
+// ═══ 공통 카메라 유틸 ═══
+let _activeStream=null;
+async function _openCam(videoEl){
+  try{
+    _activeStream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}
+    });
+    videoEl.srcObject=_activeStream;
+    await videoEl.play();
+    return true;
+  }catch(e){alert('카메라 접근 실패: '+e.message);return false}
+}
+function _closeCam(){
+  if(_activeStream){_activeStream.getTracks().forEach(t=>t.stop());_activeStream=null}
+}
+function _captureFrame(videoEl,canvasEl){
+  canvasEl.width=videoEl.videoWidth;
+  canvasEl.height=videoEl.videoHeight;
+  canvasEl.getContext('2d').drawImage(videoEl,0,0);
+  return new Promise(r=>canvasEl.toBlob(b=>r(b),'image/jpeg',0.92));
+}
+
+// ═══ 기준설정 Step 1: 라이브 카메라 ═══
+let _refBlob=null;
+function setStep(n){
+  document.getElementById('st1').className='step '+(n===1?'active':n>1?'done':'');
+  document.getElementById('st2').className='step '+(n===2?'active':n>2?'done':'');
+  document.getElementById('st3').className='step '+(n===3?'active':'');
+  document.getElementById('refStep1').style.display=n===1?'block':'none';
+  document.getElementById('refStep2').style.display=n===2?'block':'none';
+  document.getElementById('refStep3').style.display=n===3?'block':'none';
+}
+
+async function startRefCam(){
+  const ok=await _openCam(document.getElementById('refVideo'));
+  if(!ok)return;
+  document.getElementById('refCamView').style.display='block';
+  document.getElementById('refStartBtns').style.display='none';
+  document.getElementById('refPrev').style.display='none';
+}
+function stopRefCam(){
+  _closeCam();
+  document.getElementById('refCamView').style.display='none';
+  document.getElementById('refStartBtns').style.display='block';
+}
+async function captureRef(){
+  _refBlob=await _captureFrame(document.getElementById('refVideo'),document.getElementById('refCanvas'));
+  _closeCam();
+  document.getElementById('refPrevImg').src=URL.createObjectURL(_refBlob);
+  document.getElementById('refCamView').style.display='none';
+  document.getElementById('refPrev').style.display='block';
+}
+function retakeRef(){
+  document.getElementById('refPrev').style.display='none';
+  startRefCam();
+}
+function handleRefFile(e){
+  const f=e.target.files[0];if(!f)return;
+  _refBlob=f;
+  document.getElementById('refPrevImg').src=URL.createObjectURL(f);
+  document.getElementById('refStartBtns').style.display='none';
+  document.getElementById('refPrev').style.display='block';
+}
+async function submitRef(){
+  if(!_refBlob)return;
+  document.getElementById('refPrev').style.display='none';
+  document.getElementById('refAnalyzing').style.display='block';
+  const form=new FormData();form.append('image',_refBlob);
+  try{
+    const res=await fetch(API+'/api/ocr/analyze',{method:'POST',body:form});
+    if(!res.ok)throw new Error(`${res.status}`);
+    analyzeData=await res.json();
+    selectedItems=new Set();
+    renderAnalyze();
+    setStep(2);
+  }catch(err){
+    alert('분석 실패: '+err.message);
+    document.getElementById('refStartBtns').style.display='block';
+  }finally{document.getElementById('refAnalyzing').style.display='none'}
+}
+
+function renderAnalyze(){
+  const wrap=document.getElementById('analyzeWrap');
+  let markers='';
+  analyzeData.detected_items.forEach((it,i)=>{
+    const cls=it.is_numeric?'numeric':'text';
+    const sel=selectedItems.has(i)?'selected':'';
+    const left=it.cx_pct - it.w_pct/2;
+    const top=it.cy_pct - it.h_pct/2;
+    markers+=`<div class="det-marker ${cls} ${sel}" id="mk-${i}"
+      style="left:${left}%;top:${top}%;width:${it.w_pct}%;height:${it.h_pct}%"
+      onclick="toggleItem(${i})">${it.is_numeric?it.value:''}</div>`;
+  });
+  wrap.innerHTML=`<img src="data:image/jpeg;base64,${analyzeData.screen_image}">${markers}`;
+  updateSelectedList();
+}
+
+function toggleItem(i){
+  if(selectedItems.has(i))selectedItems.delete(i);
+  else selectedItems.add(i);
+  const mk=document.getElementById('mk-'+i);
+  if(mk)mk.classList.toggle('selected');
+  updateSelectedList();
+}
+
+function selectAllNumeric(){
+  analyzeData.detected_items.forEach((it,i)=>{
+    if(it.is_numeric){selectedItems.add(i);
+      const mk=document.getElementById('mk-'+i);if(mk)mk.classList.add('selected');}
+  });
+  updateSelectedList();
+}
+function clearSelection(){
+  selectedItems.clear();
+  document.querySelectorAll('.det-marker.selected').forEach(el=>el.classList.remove('selected'));
+  updateSelectedList();
+}
+
+function updateSelectedList(){
+  const el=document.getElementById('selectedList');
+  document.getElementById('btnStep3').disabled=selectedItems.size===0;
+  if(!selectedItems.size){el.innerHTML='';return}
+  const items=[...selectedItems].map(i=>analyzeData.detected_items[i]);
+  el.innerHTML=`<div class="card" style="padding:8px"><div style="font-size:12px;color:#94a3b8;margin-bottom:4px">선택됨: ${items.length}개</div>`+
+    items.map(it=>`<span style="display:inline-block;background:#065f46;color:#6ee7b7;padding:2px 8px;border-radius:4px;font-size:12px;margin:2px">${it.is_numeric?it.value:it.text}</span>`).join('')+
+    '</div>';
+}
+
+// ═══ Step 3: 조건 입력 ═══
+function goStep3(){
+  setStep(3);
+  const cl=document.getElementById('conditionList');
+  const items=[...selectedItems].map(i=>analyzeData.detected_items[i]);
+  cl.innerHTML=items.map((it,idx)=>`
+    <div class="sel-item" data-idx="${[...selectedItems][idx]}">
+      <div class="sel-head">
+        <span class="sel-val">${it.is_numeric?it.value:'—'}</span>
+        <span class="sel-text">"${it.text}" (${it.cx_pct.toFixed(0)}%, ${it.cy_pct.toFixed(0)}%)</span>
+      </div>
+      ${it.is_numeric?`
+        <label>판정 조건</label>
+        <select class="inp cond-type" onchange="toggleCondFields(this)">
+          <option value="range">범위 (MIN ~ MAX)</option>
+          <option value="min">이상 (≥ 값)</option>
+          <option value="max">이하 (≤ 값)</option>
+          <option value="equal">동일 (= 값 ± 오차)</option>
+        </select>
+        <div class="cond-fields">
+          <div style="display:flex;gap:6px">
+            <div style="flex:1"><label>OK 최소</label><input class="inp cond-ok-min" type="number" step="0.1" value="${Math.max(0,it.value-10).toFixed(1)}"></div>
+            <div style="flex:1"><label>OK 최대</label><input class="inp cond-ok-max" type="number" step="0.1" value="${(it.value+10).toFixed(1)}"></div>
+          </div>
+        </div>
+        <div class="cond-fields-single" style="display:none">
+          <div style="display:flex;gap:6px">
+            <div style="flex:1"><label>기준값</label><input class="inp cond-threshold" type="number" step="0.1" value="${it.value}"></div>
+            <div style="flex:1"><label>오차(±)</label><input class="inp cond-tolerance" type="number" step="0.1" value="1"></div>
+          </div>
+        </div>
+      `:`
+        <label>OK 텍스트 (쉼표 구분)</label>
+        <input class="inp cond-ok-text" value="OK,PASS,RUN,ON">
+        <label>NG 텍스트 (쉼표 구분)</label>
+        <input class="inp cond-ng-text" value="NG,FAIL,STOP,OFF">
+      `}
+      <label>항목 이름 (선택)</label>
+      <input class="inp cond-name" placeholder="예: #1-2 MAX전류" value="">
+    </div>
+  `).join('');
+}
+
+function toggleCondFields(sel){
+  const parent=sel.closest('.sel-item');
+  const range=parent.querySelector('.cond-fields');
+  const single=parent.querySelector('.cond-fields-single');
+  if(sel.value==='range'){range.style.display='block';single.style.display='none'}
+  else{range.style.display='none';single.style.display='block'}
+}
+
+function goStep2(){setStep(2);renderAnalyze()}
+
+// ═══ 프로필 저장 ═══
+async function saveProfile(){
+  const rules=[];
+  document.querySelectorAll('.sel-item').forEach(el=>{
+    const idx=parseInt(el.dataset.idx);
+    const it=analyzeData.detected_items[idx];
+    const condType=el.querySelector('.cond-type')?.value||'text';
+    const name=el.querySelector('.cond-name')?.value||it.text;
+
+    const rule={
+      idx, name,
+      text:it.text, value:it.value, is_numeric:it.is_numeric,
+      cx_pct:it.cx_pct, cy_pct:it.cy_pct, w_pct:it.w_pct, h_pct:it.h_pct,
+      condition:condType,
+    };
+
+    if(it.is_numeric){
+      if(condType==='range'){
+        rule.ok_min=parseFloat(el.querySelector('.cond-ok-min')?.value)||0;
+        rule.ok_max=parseFloat(el.querySelector('.cond-ok-max')?.value)||999;
+      } else {
+        rule.threshold=parseFloat(el.querySelector('.cond-threshold')?.value)||0;
+        rule.tolerance=parseFloat(el.querySelector('.cond-tolerance')?.value)||1;
+      }
+      rule.value_range_min=(it.value||0)-20;
+      rule.value_range_max=(it.value||0)+20;
+    } else {
+      rule.ok_text=(el.querySelector('.cond-ok-text')?.value||'').split(',').filter(Boolean);
+      rule.ng_text=(el.querySelector('.cond-ng-text')?.value||'').split(',').filter(Boolean);
+    }
+    rules.push(rule);
+  });
+
+  profileRules=rules;
+  const profileData={
+    rules,
+    created_at:new Date().toISOString(),
+    total_items:rules.length,
+    detected_items_count:analyzeData?.total_detected||0,
+  };
+
+  // 서버에 프로필 저장 (QR 포인트가 선택된 경우)
+  if(selQrId){
+    try{
+      await api('/api/qr/profile',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({qr_point_id:selQrId, profile_data:profileData, reference_image:analyzeData?.original_image})});
+    }catch(e){console.error('서버 프로필 저장 실패',e)}
+  }
+
+  // 로컬에도 백업
+  localStorage.setItem(`profile_${selQrCode||selEquipId||'default'}`,JSON.stringify(profileData));
+
+  const path=navStack.map(n=>n.name).join(' > ')+' > '+selEquipName;
+  alert(`✅ ${rules.length}개 판정항목 저장 완료\n🏷️ QR: ${selQrCode||'-'}\n이제 판정 탭에서 촬영하세요`);
+  document.getElementById('judgeQrInput').value=selQrCode;
+  document.getElementById('judgeInfo').innerHTML=`📍 ${path}<br>🏷️ <b>${selQrName}</b> (QR: ${selQrCode}) — <span style="color:#6ee7b7">${rules.length}개 판정항목</span>`;
+  sw('judge');
+}
+
+function loadProfile(){
+  const key=`profile_${selEquipId||'default'}`;
+  const saved=localStorage.getItem(key);
+  if(saved){
+    const p=JSON.parse(saved);
+    profileRules=p.rules||[];
+    document.getElementById('judgeInfo').innerHTML=`📍 ${navStack.map(n=>n.name).join(' > ')} > <b>${selEquipName}</b><br><span style="color:#6ee7b7">${profileRules.length}개 판정항목 설정됨</span>`;
+  } else {
+    profileRules=[];
+  }
+}
+
+// ═══ 판정: QR 실시간 스캔 ═══
+let _qrScanTimer=null;
+async function startJudgeQR(){
+  _closeCam();
+  const ok=await _openCam(document.getElementById('qrVideo'));
+  if(!ok)return;
+  document.getElementById('judgeQrScan').style.display='block';
+  document.getElementById('judgeCamMode').style.display='none';
+  document.getElementById('judgePrev').style.display='none';
+  document.getElementById('judgeModeBar').style.display='none';
+  // QR 실시간 스캔 시작
+  _qrScanTimer=setInterval(scanQrFrame,300);
+}
+
+function scanQrFrame(){
+  const video=document.getElementById('qrVideo');
+  const canvas=document.getElementById('qrCanvas');
+  if(!video.videoWidth)return;
+  canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+  const ctx=canvas.getContext('2d');
+  ctx.drawImage(video,0,0);
+  const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const code=jsQR(imgData.data,canvas.width,canvas.height,{inversionAttempts:'dontInvert'});
+  if(code&&code.data){
+    clearInterval(_qrScanTimer);_qrScanTimer=null;
+    const st=document.getElementById('qrStatus');
+    st.textContent='✅ '+code.data;st.className='cam-status found';
+    // QR 감지됨 → 0.5초 후 처리
+    setTimeout(()=>handleScannedQr(code.data),500);
+  }
+}
+
+async function handleScannedQr(qrCode){
+  _closeCam();
+  document.getElementById('judgeQrScan').style.display='none';
+  document.getElementById('judgeModeBar').style.display='flex';
+  document.getElementById('judgeQrInput').value=qrCode;
+  // QR 프로필 로드
+  try{
+    const data=await api(`/api/qr/scan/${encodeURIComponent(qrCode)}`);
+    selQrCode=qrCode;selQrName=data.qr_point.screen_name;
+    if(data.has_profile){
+      profileRules=(data.qr_point.profile_data||{}).rules||[];
+      document.getElementById('judgeInfo').innerHTML=`🏷️ <b>${data.qr_point.screen_name}</b> (${data.equipment?.name||''})<br><span style="color:#6ee7b7">${data.profile_rules_count}개 판정항목 — PLC를 촬영하세요</span>`;
+      // 바로 카메라 모드로 전환
+      startJudgeCam();
+    }else{
+      document.getElementById('judgeInfo').innerHTML=`🏷️ <b>${data.qr_point.screen_name}</b> — <span style="color:#fca5a5">프로필 미설정</span>`;
+    }
+  }catch(e){
+    document.getElementById('judgeInfo').innerHTML=`<span style="color:#fca5a5">QR '${qrCode}' 미등록</span>`;
+  }
+}
+
+// ═══ 판정: PLC 라이브 촬영 ═══
+let _judgeBlob=null;
+async function startJudgeCam(){
+  _closeCam();
+  const ok=await _openCam(document.getElementById('plcVideo'));
+  if(!ok)return;
+  document.getElementById('judgeCamMode').style.display='block';
+  document.getElementById('judgeQrScan').style.display='none';
+  document.getElementById('judgePrev').style.display='none';
+  document.getElementById('judgeModeBar').style.display='none';
+  document.getElementById('plcStatus').textContent='PLC 화면을 맞추고 촬영';
+}
+async function capturePlc(){
+  _judgeBlob=await _captureFrame(document.getElementById('plcVideo'),document.getElementById('plcCanvas'));
+  _closeCam();
+  document.getElementById('judgePrevImg').src=URL.createObjectURL(_judgeBlob);
+  document.getElementById('judgeCamMode').style.display='none';
+  document.getElementById('judgePrev').style.display='block';
+}
+function retakeJudge(){
+  document.getElementById('judgePrev').style.display='none';
+  startJudgeCam();
+}
+function stopJudgeCam(){
+  _closeCam();
+  if(_qrScanTimer){clearInterval(_qrScanTimer);_qrScanTimer=null}
+  document.getElementById('judgeQrScan').style.display='none';
+  document.getElementById('judgeCamMode').style.display='none';
+  document.getElementById('judgePrev').style.display='none';
+  document.getElementById('judgeModeBar').style.display='flex';
+  document.getElementById('qrStatus').textContent='QR 스캔 중...';
+  document.getElementById('qrStatus').className='cam-status scanning';
+}
+function toggleManualQr(){
+  const el=document.getElementById('manualQrRow');
+  el.style.display=el.style.display==='none'?'block':'none';
+}
+function handleJudgeFile(e){
+  const f=e.target.files[0];if(!f)return;
+  _judgeBlob=f;
+  document.getElementById('judgePrevImg').src=URL.createObjectURL(f);
+  document.getElementById('judgePrev').style.display='block';
+  document.getElementById('judgeModeBar').style.display='none';
+}
+
+// ═══ 판정 실행 (공통) ═══
+async function submitJudge(){
+  const blob=_judgeBlob;if(!blob)return;
+  document.getElementById('judgePrev').style.display='none';
+  document.getElementById('judging').style.display='block';
+
+  const form=new FormData();form.append('image',blob,'plc.jpg');
+  if(profileRules.length>0){
+    const nr=profileRules.find(r=>r.is_numeric);
+    if(nr){
+      form.append('warn_max',nr.ok_max||45);
+      form.append('error_max',(nr.ok_max||45)+5);
+      form.append('warn_min',nr.ok_min||20);
+      form.append('error_min',Math.max(0,(nr.ok_min||20)-5));
+    }
+  }
+
+  try{
+    const res=await fetch(API+'/api/ocr/smart',{method:'POST',body:form});
+    if(!res.ok)throw new Error(`${res.status}`);
+    const data=await res.json();
+    if(profileRules.length>0)applyProfileJudgment(data);
+    data._path=navStack.map(n=>n.name).join(' > ')+(selEquipName?' > '+selEquipName:'');
+    data._time=new Date().toLocaleString('ko-KR');
+    showResult(data);sw('result');
+  }catch(err){alert('판정 실패: '+err.message)}
+  finally{
+    document.getElementById('judging').style.display='none';
+    document.getElementById('judgeModeBar').style.display='flex';
+    _judgeBlob=null;
+  }
+}
+
+function applyProfileJudgment(data){
+  // 프로필 규칙으로 각 값 재판정
+  let overall='ok';
+  data.values.forEach(v=>{
+    // 가장 가까운 프로필 규칙 찾기
+    const matched=profileRules.find(r=>{
+      if(!r.is_numeric||!v.value)return false;
+      if(r.value_range_min!=null&&r.value_range_max!=null)
+        return v.value>=r.value_range_min&&v.value<=r.value_range_max;
+      return false;
+    });
+    if(!matched)return;
+
+    v.rule_name=matched.name;
+    if(matched.condition==='range'){
+      if(v.value>=matched.ok_min&&v.value<=matched.ok_max){v.level='ok';v.reason=`${v.value.toFixed(1)} ∈ [${matched.ok_min}~${matched.ok_max}]`}
+      else{v.level='ng';v.reason=`${v.value.toFixed(1)} ∉ [${matched.ok_min}~${matched.ok_max}]`}
+    }else if(matched.condition==='min'){
+      if(v.value>=matched.threshold){v.level='ok';v.reason=`${v.value.toFixed(1)} ≥ ${matched.threshold}`}
+      else{v.level='ng';v.reason=`${v.value.toFixed(1)} < ${matched.threshold}`}
+    }else if(matched.condition==='max'){
+      if(v.value<=matched.threshold){v.level='ok';v.reason=`${v.value.toFixed(1)} ≤ ${matched.threshold}`}
+      else{v.level='ng';v.reason=`${v.value.toFixed(1)} > ${matched.threshold}`}
+    }else if(matched.condition==='equal'){
+      if(Math.abs(v.value-matched.threshold)<=matched.tolerance){v.level='ok';v.reason=`${v.value.toFixed(1)} ≈ ${matched.threshold} ±${matched.tolerance}`}
+      else{v.level='ng';v.reason=`${v.value.toFixed(1)} ≠ ${matched.threshold} ±${matched.tolerance}`}
+    }
+    if(v.level==='ng')overall='ng';
+    else if(v.level==='warning'&&overall!=='ng')overall='warning';
+  });
+  data.overall=overall;
+}
+
+// ═══ 결과 + 오판정 수정/학습 ═══
+let _corrections=[];  // 이 판정에서 수정한 항목 기록
+
+function showResult(d){
+  window._lastResult=d;
+  _corrections=[];
+  document.getElementById('noRes').style.display='none';
+  const a=document.getElementById('resArea');a.style.display='block';
+  const ov=d.overall||'unknown';
+  const bc=ov==='ok'?'ok':ov==='warning'?'warning':'ng';
+  const bt={ok:'✅ 정상',warning:'⚠️ 경고',ng:'❌ 이상'}[ov]||'미판정';
+  let ok=0,warn=0,ng=0;
+  (d.values||[]).forEach(v=>{if(v.level==='ok')ok++;else if(v.level==='warning')warn++;else ng++});
+
+  let vh=(d.values||[]).map((v,i)=>{
+    const c=v.level==='ok'?'ok':v.level==='warning'?'warning':'ng';
+    return `<div class="vrow" id="vr-${i}">
+      <div class="vnum ${c}">${v.value.toFixed(1)}</div>
+      <div style="flex:1;margin-left:6px">
+        <div style="font-size:11px;color:#94a3b8">${v.rule_name||v.text}</div>
+        <div style="font-size:10px;color:#64748b">${v.reason||''}</div>
+      </div>
+      <span class="badge ${c}" style="font-size:10px" id="vb-${i}">${v.level.toUpperCase()}</span>
+      <button class="btn-sm bs" onclick="openFix(${i})" style="font-size:10px;padding:3px 6px">✏️</button>
+    </div>`;
+  }).join('');
+
+  a.innerHTML=`
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span class="badge ${bc}" style="font-size:14px;padding:5px 12px">${bt}</span>
+        <span style="font-size:11px;color:#94a3b8">${d.total_detected}개 · ${(d.processing_ms/1000).toFixed(1)}초</span>
+      </div>
+      ${d._path?`<div style="font-size:11px;color:#64748b;margin-bottom:8px">📍 ${d._path} · ${d._time}</div>`:''}
+      <div class="srow">
+        <div class="sbox"><div class="n" style="color:#6ee7b7">${ok}</div><div class="l">정상</div></div>
+        <div class="sbox"><div class="n" style="color:#fbbf24">${warn}</div><div class="l">경고</div></div>
+        <div class="sbox"><div class="n" style="color:#fca5a5">${ng}</div><div class="l">이상</div></div>
+      </div>
+      <div style="max-height:40vh;overflow-y:auto">${vh}</div>
+    </div>
+    <div class="card" id="correctionSummary" style="display:none">
+      <div class="card-title">🧠 수정 내역 <span id="corrCount" style="color:#6ee7b7"></span></div>
+      <div id="corrList"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📝 전체 판정 검증</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn bg" style="flex:1" onclick="verifyResult('ok')">✅ 전체 정확</button>
+        <button class="btn by" style="flex:1" onclick="verifyResult('partial')">⚠️ 일부 오류</button>
+        <button class="btn bd" style="flex:1" onclick="verifyResult('wrong')">❌ 전체 오판정</button>
+      </div>
+    </div>`;
+}
+
+// ── 개별 수치 오판정 수정 모달 ──
+function openFix(i){
+  const v=window._lastResult?.values?.[i];if(!v)return;
+  const c=v.level==='ok'?'ok':v.level==='warning'?'warning':'ng';
+  document.getElementById('m1Title').textContent='오판정 수정';
+  document.getElementById('m1Body').innerHTML=`
+    <div style="background:#0f172a;border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:22px;font-weight:700">${v.value.toFixed(1)}</span>
+        <span class="badge ${c}">${v.level.toUpperCase()}</span>
+      </div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px">OCR: "${v.text}" · ${v.reason||''}</div>
+    </div>
+
+    <label>수정 유형</label>
+    <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap" id="fixTypeBar">
+      <button class="btn-sm bp fix-type active" onclick="setFixType('value',this)">📝 값 오류</button>
+      <button class="btn-sm bs fix-type" onclick="setFixType('level',this)">⚖️ 판정 오류</button>
+      <button class="btn-sm bs fix-type" onclick="setFixType('noise',this)">🚫 노이즈</button>
+    </div>
+
+    <div id="fixValueFields">
+      <label>실제 값 (OCR이 틀렸다면)</label>
+      <input class="inp" id="fix_val" type="number" step="0.1" value="${v.value.toFixed(1)}">
+    </div>
+
+    <div id="fixLevelFields">
+      <label>올바른 판정</label>
+      <div style="display:flex;gap:4px;margin-bottom:8px">
+        <button class="btn bg btn-sm fix-lv ${v.level==='ok'?'active':''}" onclick="setFixLevel('ok',this)" style="flex:1">✅ OK</button>
+        <button class="btn by btn-sm fix-lv ${v.level==='warning'?'active':''}" onclick="setFixLevel('warning',this)" style="flex:1">⚠️ 경고</button>
+        <button class="btn bd btn-sm fix-lv ${v.level==='ng'?'active':''}" onclick="setFixLevel('ng',this)" style="flex:1">❌ NG</button>
+      </div>
+    </div>
+
+    <label>메모 (선택)</label>
+    <input class="inp" id="fix_note" placeholder="수정 사유...">
+    <input type="hidden" id="fix_idx" value="${i}">
+    <input type="hidden" id="fix_type" value="value">
+    <input type="hidden" id="fix_level" value="${v.level}">`;
+
+  addLevel='fix';
+  document.getElementById('modal1').classList.add('show');
+}
+
+function setFixType(type, btn){
+  document.querySelectorAll('.fix-type').forEach(b=>{b.className=b.className.replace(' active','');b.className=b.className.replace('bp','bs')});
+  btn.className=btn.className.replace('bs','bp')+' active';
+  document.getElementById('fix_type').value=type;
+  document.getElementById('fixValueFields').style.display=type==='noise'?'none':'block';
+  document.getElementById('fixLevelFields').style.display=type==='noise'?'none':'block';
+}
+
+function setFixLevel(lv, btn){
+  document.querySelectorAll('.fix-lv').forEach(b=>b.style.opacity='0.4');
+  btn.style.opacity='1';
+  document.getElementById('fix_level').value=lv;
+}
+
+async function saveFix(){
+  const i=parseInt(document.getElementById('fix_idx').value);
+  const type=document.getElementById('fix_type').value;
+  const newVal=parseFloat(document.getElementById('fix_val')?.value);
+  const newLevel=type==='noise'?'noise':document.getElementById('fix_level').value;
+  const note=document.getElementById('fix_note')?.value||'';
+  const v=window._lastResult?.values?.[i];
+  if(!v)return;
+
+  // 수정 기록 저장
+  const correction={
+    index:i,type,
+    original_value:v.value, original_level:v.level, original_text:v.text,
+    new_value:type==='noise'?null:newVal,
+    new_level:newLevel, note,
+    timestamp:new Date().toISOString()
+  };
+  _corrections.push(correction);
+
+  // UI 즉시 반영
+  const el=document.getElementById('vr-'+i);
+  const badge=document.getElementById('vb-'+i);
+  if(type==='noise'){
+    el.style.opacity='0.3';
+    el.innerHTML=`<div style="color:#64748b;font-size:12px;width:100%;text-align:center">🚫 노이즈 처리됨 (${v.text})</div>`;
+  } else {
+    const nc=newLevel==='ok'?'ok':newLevel==='warning'?'warning':'ng';
+    el.querySelector('.vnum').textContent=(newVal||v.value).toFixed(1);
+    el.querySelector('.vnum').className='vnum '+nc;
+    if(badge){badge.textContent=newLevel.toUpperCase();badge.className='badge '+nc;badge.style.fontSize='10px'}
+  }
+
+  // 수정 내역 표시
+  updateCorrectionSummary();
+
+  // 로컬 학습 데이터 축적
+  let learns=JSON.parse(localStorage.getItem('plc_learning')||'[]');
+  learns.push({...correction, qr_code:selQrCode, equip:selEquipName});
+  if(learns.length>500)learns=learns.slice(-500);
+  localStorage.setItem('plc_learning',JSON.stringify(learns));
+
+  closeM1();
+}
+
+function updateCorrectionSummary(){
+  if(!_corrections.length){
+    document.getElementById('correctionSummary').style.display='none';
+    return;
+  }
+  document.getElementById('correctionSummary').style.display='block';
+  document.getElementById('corrCount').textContent=`(${_corrections.length}건)`;
+  document.getElementById('corrList').innerHTML=_corrections.map(c=>{
+    const icon=c.type==='noise'?'🚫':c.type==='value'?'📝':'⚖️';
+    const desc=c.type==='noise'?`${c.original_text} → 노이즈 제거`
+      :c.type==='value'?`${c.original_value.toFixed(1)} → ${c.new_value?.toFixed(1)||'?'}`
+      :`${c.original_level} → ${c.new_level}`;
+    return `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid #0f172a;color:#94a3b8">${icon} ${desc}${c.note?' · '+c.note:''}</div>`;
+  }).join('');
+}
+
+async function verifyResult(type){
+  // 전체 판정 검증 저장
+  const result={
+    timestamp:new Date().toISOString(),
+    qr_code:selQrCode, equip:selEquipName,
+    path:window._lastResult?._path,
+    system_overall:window._lastResult?.overall,
+    user_verdict:type,
+    total_values:window._lastResult?.total_detected,
+    corrections:_corrections,
+    corrections_count:_corrections.length
+  };
+
+  // 로컬 저장
+  let history=JSON.parse(localStorage.getItem('plc_verify_history')||'[]');
+  history.unshift(result);
+  if(history.length>200)history=history.slice(0,200);
+  localStorage.setItem('plc_verify_history',JSON.stringify(history));
+
+  const msg=type==='ok'?'✅ 전체 정확으로 기록됨'
+    :type==='partial'?`⚠️ 일부 오류 기록됨 (${_corrections.length}건 수정)`
+    :'❌ 전체 오판정 기록됨';
+  alert(msg+'\n\n학습 데이터가 축적되었습니다.');
+}
+
+// saveM1에서 fix 분기 처리
+function _isFix(){return addLevel==='fix'}
+
+// 기존 fixItem → openFix로 대체
+function fixItem(i){openFix(i)}
+
+// ═══ 기준정보 추가 모달 ═══
+let addLevel='';
+function openAdd(level){
+  addLevel=level;
+  const L=LEVELS.find(l=>l.key===level);
+  document.getElementById('m1Title').textContent=`${L.label} 추가`;
+  let f='';
+  if(level==='company')f=`<label>코드</label><input class="inp" id="a_code"><label>이름</label><input class="inp" id="a_name"><label>업종</label><input class="inp" id="a_industry">`;
+  else if(level==='division')f=`<label>코드</label><input class="inp" id="a_code"><label>이름</label><input class="inp" id="a_name"><label>위치</label><input class="inp" id="a_location">`;
+  else if(level==='line')f=`<label>코드</label><input class="inp" id="a_code"><label>이름</label><input class="inp" id="a_name"><label>유형</label><select class="inp" id="a_line_type"><option>조립</option><option>SMT</option><option>프레스</option><option>건조</option><option>검사</option></select>`;
+  else if(level==='process')f=`<label>코드</label><input class="inp" id="a_code"><label>이름</label><input class="inp" id="a_name"><label>유형</label><select class="inp" id="a_process_type"><option>가공</option><option>건조</option><option>검사</option><option>조립</option><option>도장</option></select>`;
+  else if(level==='equipment')f=`<label>코드</label><input class="inp" id="a_code"><label>이름</label><input class="inp" id="a_name"><label>QR</label><input class="inp" id="a_qr_code"><label>유형</label><select class="inp" id="a_equipment_type"><option>건조</option><option>가공</option><option>검사</option><option>조립</option></select><label>PLC</label><select class="inp" id="a_plc_type"><option>LS XGT</option><option>LS XGB</option><option>Mitsubishi Q</option><option>Siemens S7-1200</option><option>Omron NJ</option><option>기타</option></select>`;
+  document.getElementById('m1Body').innerHTML=f;
+  document.getElementById('modal1').classList.add('show');
+}
+function closeM1(){document.getElementById('modal1').classList.remove('show')}
+async function saveM1(){
+  // 오판정 수정
+  if(addLevel==='fix'){await saveFix();return}
+  // QR 추가
+  if(addLevel==='qr'){
+    const body={
+      equipment_id:selEquipId,
+      qr_code:document.getElementById('qr_code')?.value,
+      screen_name:document.getElementById('qr_screen')?.value,
+      description:document.getElementById('qr_desc')?.value||null,
+    };
+    if(!body.qr_code||!body.screen_name){alert('QR코드와 화면이름 필수');return}
+    try{await api('/api/qr/points',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    closeM1();loadQrPoints();}catch(e){alert('저장 실패: '+e.message)}
+    return;
+  }
+  const L=LEVELS.find(l=>l.key===addLevel);
+  const body={code:document.getElementById('a_code')?.value,name:document.getElementById('a_name')?.value};
+  if(!body.code||!body.name){alert('코드/이름 필수');return}
+  if(L.parentParam&&navStack.length>0)body[L.parentParam]=navStack[navStack.length-1].id;
+  ['industry','location','line_type','process_type','equipment_type','plc_type','qr_code'].forEach(f=>{
+    const el=document.getElementById('a_'+f);if(el)body[f]=el.value;
+  });
+  await api(L.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  closeM1();renderTree();
+}
+
+renderTree();
+</script>
+</body>
+</html>

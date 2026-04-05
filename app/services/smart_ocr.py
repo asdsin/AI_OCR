@@ -49,12 +49,22 @@ class SmartOcrService:
         return self._reader
 
     def extract_values(self, screen_img: np.ndarray) -> SmartOcrResult:
-        """화면 이미지에서 모든 수치값을 자동 추출"""
+        """화면 이미지에서 수치값을 자동 추출 (패턴 기반 노이즈 필터링)"""
+        from app.services.plc_patterns import (
+            is_noise as pattern_is_noise, classify_value,
+            suggest_screen_type, detect_manufacturer, VALUE_CONTEXT_LABELS
+        )
+
         start = time.time()
         h, w = screen_img.shape[:2]
 
         reader = self._get_reader()
         results = reader.readtext(screen_img)
+
+        # 1차: 전체 텍스트 수집 → 화면 유형 + 제조사 추정
+        all_texts = [text.strip() for _, text, _ in results if text.strip()]
+        screen_type = suggest_screen_type(all_texts)
+        manufacturer = detect_manufacturer(all_texts)
 
         values = []
         labels = []
@@ -64,27 +74,22 @@ class SmartOcrService:
             cx = float(np.mean(pts[:, 0])) / w * 100
             cy = float(np.mean(pts[:, 1])) / h * 100
 
-            # 노이즈 필터: 레이블/날짜/시간 제외
             text_clean = text.strip()
-            is_noise = (
-                re.search(r'#\d+-\d+', text_clean) or      # #1-2 HEATER 등
-                re.search(r'\d{4}[/\-]\d{2}', text_clean) or  # 날짜 2026/03/13
-                re.search(r'\d{1,2}\s*:\s*\d{2}', text_clean) or  # 시간 11:05, 11 : 05
-                re.search(r'HEATER|MAIN|LIST|PANEL', text_clean, re.I) or
-                re.search(r'^[A-Z]상$', text_clean) or      # S상, T상 등 레이블
-                re.search(r'^[RST]상', text_clean)
-            )
+
+            # 패턴 기반 노이즈 필터
+            if pattern_is_noise(text_clean, screen_type):
+                continue
 
             # 수치값 검출 (XX.X 패턴 우선)
             nums = re.findall(r'(\d{1,3}\.\d+)', text_clean)
             if not nums:
-                # 정수형 (2~3자리만, 1자리는 노이즈)
                 nums = re.findall(r'(?<!\d)(\d{2,3})(?!\d)', text_clean)
 
-            if nums and conf > 0.2 and not is_noise:
+            if nums and conf > 0.2:
                 val = float(nums[0])
-                # PLC 전류/온도 범위 필터 (10 ~ 300)
-                if 10 <= val <= 300:
+                # 화면 유형 기반 범위 검증
+                classification = classify_value(val, text_clean, screen_type)
+                if classification["valid"]:
                     values.append(DetectedValue(
                         text=text_clean,
                         value=val,
@@ -94,9 +99,9 @@ class SmartOcrService:
                         bbox=bbox
                     ))
 
-            # 레이블 검출
+            # 레이블 검출 (컨텍스트 레이블 사전 사용)
             text_upper = text.strip().upper()
-            for pattern in ['MAX', 'MIN', 'SV', 'PV', 'FV', 'HEATER', '#']:
+            for pattern in VALUE_CONTEXT_LABELS:
                 if pattern in text_upper:
                     labels.append({
                         'text': text.strip(),
@@ -118,11 +123,21 @@ class SmartOcrService:
     def extract_all(self, screen_img: np.ndarray) -> list[dict]:
         """
         기준 사진 분석용 — 감지된 모든 텍스트를 위치+크기와 함께 반환
-        수치/텍스트/레이블 구분하여 사용자가 시각적으로 선택할 수 있게
+        노이즈 태깅 포함하여 사용자가 시각적으로 선택할 수 있게
         """
+        from app.services.plc_patterns import (
+            is_noise as pattern_is_noise, suggest_screen_type,
+            detect_manufacturer, classify_value
+        )
+
         h, w = screen_img.shape[:2]
         reader = self._get_reader()
         results = reader.readtext(screen_img)
+
+        # 화면 유형 추정
+        all_texts = [t.strip() for _, t, _ in results if t.strip()]
+        screen_type = suggest_screen_type(all_texts)
+        manufacturer = detect_manufacturer(all_texts)
 
         items = []
         for bbox, text, conf in results:
@@ -138,16 +153,21 @@ class SmartOcrService:
             bh = (y_max - y_min) / h * 100
 
             text_clean = text.strip()
+            noise = pattern_is_noise(text_clean, screen_type)
 
             # 수치 추출 시도
             nums = re.findall(r'(\d{1,4}\.?\d*)', text_clean)
             value = float(nums[0]) if nums else None
-            is_numeric = value is not None and 0.1 <= value <= 9999
+            is_numeric = False
+            if value is not None and not noise:
+                classification = classify_value(value, text_clean, screen_type)
+                is_numeric = classification.get("valid", False)
 
             items.append({
                 "text": text_clean,
                 "value": value if is_numeric else None,
                 "is_numeric": is_numeric,
+                "is_noise": noise,
                 "cx_pct": round(cx, 1),
                 "cy_pct": round(cy, 1),
                 "w_pct": round(bw, 1),
@@ -155,6 +175,8 @@ class SmartOcrService:
                 "confidence": round(conf, 3),
             })
 
+        # 노이즈 아닌 것을 앞으로 정렬
+        items.sort(key=lambda x: (x["is_noise"], not x["is_numeric"], -x["confidence"]))
         return items
 
     def judge_with_profile(self, ocr_result: SmartOcrResult, profile_items: list[dict]) -> dict:

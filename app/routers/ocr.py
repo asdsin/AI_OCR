@@ -293,6 +293,14 @@ async def analyze_reference(image: UploadFile = File(...)):
                 "confidence": det["confidence"],
             })
 
+        # 화면 유형/제조사 추정
+        from app.services.plc_patterns import suggest_screen_type, detect_manufacturer, PLC_SCREEN_TYPES
+        all_texts = [it["text"] for it in items]
+        screen_type = suggest_screen_type(all_texts)
+        manufacturer = detect_manufacturer(all_texts)
+        numeric_count = sum(1 for it in items if it.get("is_numeric"))
+        noise_count = sum(1 for it in items if it.get("is_noise"))
+
         return {
             "screen_image": screen_b64,
             "screen_size": {"w": sw, "h": sh},
@@ -300,6 +308,11 @@ async def analyze_reference(image: UploadFile = File(...)):
             "screen_rect": rect,
             "detected_items": items,
             "total_detected": len(items),
+            "numeric_count": numeric_count,
+            "noise_filtered": noise_count,
+            "screen_type": screen_type,
+            "screen_type_name": PLC_SCREEN_TYPES.get(screen_type, {}).get("name", ""),
+            "manufacturer": manufacturer,
         }
     except HTTPException:
         raise

@@ -71,36 +71,52 @@ class DualOcrEngine:
         except Exception:
             return None
 
-    def preprocess_image(self, img: np.ndarray, options: dict | None = None) -> np.ndarray:
-        """PLC 화면 전처리 파이프라인"""
-        opts = options or {}
-
-        # 1. 리사이즈 (너무 크면 축소)
+    def preprocess_plc(self, img: np.ndarray) -> np.ndarray:
+        """
+        PLC 화면 전용 전처리 파이프라인 (v2)
+        색상 배경 제거 → 적응 이진화 → 모폴로지 → 패딩
+        """
         h, w = img.shape[:2]
-        max_dim = opts.get("max_dim", 1500)
-        if max(h, w) > max_dim:
-            scale = max_dim / max(h, w)
+
+        # 1. 해상도 정규화 (1080p 타겟)
+        if max(h, w) > 2000:
+            scale = 1500 / max(h, w)
             img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        elif max(h, w) < 600:
+            scale = 1000 / max(h, w)
+            img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
 
-        # 2. 그레이스케일
-        if len(img.shape) == 3:
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = img.copy()
+        if len(img.shape) < 3:
+            return img
 
-        # 3. 대비 향상 (CLAHE - PLC 화면에 효과적)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray)
+        # 2. 색상 배경 제거 (PLC 상태 색상: 녹/황/적)
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        # 채도가 높은 영역 = 색상 배경 → 흰색으로 대체
+        sat_mask = hsv[:, :, 1] > 60  # 채도 높은 영역
+        result = img.copy()
+        result[sat_mask] = [255, 255, 255]  # 색상 배경 → 흰색
 
-        # 4. 이진화 (Otsu)
-        if opts.get("binarize", True):
-            _, binary = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            # PLC 화면은 보통 밝은 배경 + 어두운 글자 or 그 반대
-            if opts.get("invert", False):
-                binary = cv2.bitwise_not(binary)
-            return binary
+        # 3. 그레이스케일
+        gray = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
 
-        return enhanced
+        # 4. 적응 이진화 (Otsu 대신 — 로컬 대비 변화에 강함)
+        binary = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY, blockSize=15, C=8
+        )
+
+        # 5. 모폴로지 (소수점 보호 + 노이즈 제거)
+        kernel = np.ones((2, 2), np.uint8)
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+
+        # 6. 흰색 패딩 (에지 텍스트 감지 개선)
+        binary = cv2.copyMakeBorder(binary, 10, 10, 10, 10,
+                                     cv2.BORDER_CONSTANT, value=255)
+        return binary
+
+    def preprocess_image(self, img: np.ndarray, options: dict | None = None) -> np.ndarray:
+        """호환용 래퍼"""
+        return self.preprocess_plc(img)
 
     def crop_zone(self, img: np.ndarray, x_pct: float, y_pct: float,
                   w_pct: float, h_pct: float) -> np.ndarray:
@@ -117,23 +133,52 @@ class DualOcrEngine:
         ch = max(1, min(ch, h - y))
         return img[y:y+ch, x:x+cw]
 
-    def _run_easyocr(self, img: np.ndarray) -> OcrResult:
-        """EasyOCR 실행"""
+    # ── 수치 후처리 보정 ──
+    _OCR_FIX = str.maketrans({'O':'0','o':'0','I':'1','l':'1','S':'5','B':'8','_':'.','|':'1'})
+
+    @staticmethod
+    def _postprocess_text(text: str) -> str:
+        """OCR 결과 후처리 — 흔한 오인식 패턴 보정"""
+        t = text.strip()
+        # 숫자 컨텍스트에서 문자→숫자 치환
+        if re.search(r'\d', t):
+            t = t.translate(DualOcrEngine._OCR_FIX)
+            # "43_0" → "43.0", "27,5" → "27.5"
+            t = re.sub(r'(\d)[_,](\d)', r'\1.\2', t)
+            # "43 .0" → "43.0" (공백 제거)
+            t = re.sub(r'(\d)\s*\.\s*(\d)', r'\1.\2', t)
+            # "43 0" → "43.0" (3자리 이하 숫자 사이 공백 → 소수점 가능성)
+            t = re.sub(r'(\d{1,3})\s+(\d{1})(?!\d)', r'\1.\2', t)
+        return t
+
+    def _run_easyocr(self, img: np.ndarray, allowlist: str | None = None) -> OcrResult:
+        """EasyOCR 실행 (최적 파라미터)"""
         start = time.time()
-        results = self._easyocr_reader.readtext(img)
+        kwargs = {
+            "text_threshold": 0.5,     # 기본 0.7 → 약한 텍스트도 감지
+            "link_threshold": 0.2,     # 기본 0.4 → 소수점 분리 방지
+            "low_text": 0.3,           # 기본 0.4 → 문자 경계 확장
+            "width_ths": 0.8,          # 기본 0.5 → "43.0"+"A" 병합
+            "mag_ratio": 1.5,          # 내부 확대 → 작은 글자 인식↑
+            "min_size": 10,            # 기본 20 → 작은 텍스트 감지
+        }
+        if allowlist:
+            kwargs["allowlist"] = allowlist
+
+        results = self._easyocr_reader.readtext(img, **kwargs)
         elapsed = int((time.time() - start) * 1000)
 
         if not results:
             return OcrResult("", 0.0, "easyocr", None, [], elapsed)
 
-        # 결과 조합
         texts = []
         confidences = []
         boxes = []
         for bbox, text, conf in results:
-            texts.append(text)
+            fixed = self._postprocess_text(text)
+            texts.append(fixed)
             confidences.append(conf)
-            boxes.append({"bbox": bbox, "text": text, "confidence": conf})
+            boxes.append({"bbox": bbox, "text": fixed, "confidence": conf})
 
         full_text = " ".join(texts)
         avg_conf = sum(confidences) / len(confidences) if confidences else 0
@@ -141,23 +186,9 @@ class DualOcrEngine:
 
         return OcrResult(full_text, avg_conf, "easyocr", value, boxes, elapsed)
 
-    def _run_easyocr_enhanced(self, img: np.ndarray) -> OcrResult:
-        """EasyOCR 강화 모드 - 다른 전처리 적용 후 재시도"""
-        # 전처리 변형: 반전 + 샤프닝
-        enhanced = img.copy()
-        if len(enhanced.shape) == 2:
-            # 이미 그레이스케일이면 반전
-            enhanced = cv2.bitwise_not(enhanced)
-        else:
-            # 컬러면 그레이 → 반전 → 샤프닝
-            gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
-            enhanced = cv2.bitwise_not(gray)
-
-        # 샤프닝 커널
-        kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-        enhanced = cv2.filter2D(enhanced, -1, kernel)
-
-        return self._run_easyocr(enhanced)
+    def _run_easyocr_numeric(self, img: np.ndarray) -> OcrResult:
+        """숫자 전용 패스 — allowlist로 인식 공간 제한 → 정확도↑↑"""
+        return self._run_easyocr(img, allowlist="0123456789.,-+AV°C%")
 
     def _extract_number(self, text: str) -> float | None:
         """텍스트에서 수치 추출"""
@@ -170,25 +201,26 @@ class DualOcrEngine:
         return None
 
     def _recognize_sync(self, img: np.ndarray, preprocess: dict | None = None) -> tuple:
-        """동기 OCR 실행 (스레드풀에서 호출) → (primary_result, fallback_result)"""
-        processed = self.preprocess_image(img, preprocess)
+        """
+        듀얼패스 OCR (스레드풀에서 호출)
+        Pass 1: 숫자 전용 (allowlist) → 높은 정확도
+        Pass 2: 전체 문자 → 레이블 인식
+        결과: (numeric_result, full_result)
+        """
+        processed = self.preprocess_plc(img)
 
-        primary_result = None
-        fallback_result = None
+        numeric_result = None
+        full_result = None
 
         if self._easyocr_reader:
-            primary_result = self._run_easyocr(processed)
+            # Pass 1: 숫자 전용 (핵심 — 정확도 최우선)
+            numeric_result = self._run_easyocr_numeric(processed)
 
-        need_fallback = (
-            primary_result is None
-            or primary_result.confidence < settings.OCR_CONFIDENCE_THRESHOLD
-            or not primary_result.text.strip()
-        )
+            # Pass 2: 전체 (신뢰도 낮으면 원본 이미지로)
+            if numeric_result.confidence < settings.OCR_CONFIDENCE_THRESHOLD:
+                full_result = self._run_easyocr(img)  # 원본 컬러 이미지
 
-        if need_fallback and self._easyocr_reader:
-            fallback_result = self._run_easyocr_enhanced(img)
-
-        return primary_result, fallback_result
+        return numeric_result, full_result
 
     async def recognize(self, img: np.ndarray, preprocess: dict | None = None) -> OcrResult:
         """

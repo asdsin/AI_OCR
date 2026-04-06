@@ -12,7 +12,7 @@ import os
 from app.config import settings
 from app.database import init_db
 from app.services.ocr_engine import ocr_engine
-from app.routers import templates, ocr, master, criteria, qr
+from app.routers import templates, ocr, master, criteria, qr, qr_print
 
 logging.basicConfig(
     level=logging.INFO,
@@ -86,6 +86,7 @@ app.include_router(ocr.router)
 app.include_router(master.router)
 app.include_router(criteria.router)
 app.include_router(qr.router)
+app.include_router(qr_print.router)
 
 
 @app.get("/")

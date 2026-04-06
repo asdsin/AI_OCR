@@ -462,18 +462,23 @@ async function loadQrPoints(){
       const profileBadge=q.has_profile
         ?`<span class="badge ok" style="font-size:10px">${q.rules_count}개 항목</span>`
         :'<span class="badge ng" style="font-size:10px">미설정</span>';
-      return `<div class="tree-item" style="border-left:3px solid ${q.has_profile?'#22c55e':'#64748b'}">
+      return `<div class="tree-item" style="border-left:3px solid ${q.has_profile?'#22c55e':'#64748b'};flex-wrap:wrap">
         <div class="tree-icon">🏷️</div>
         <div class="tree-info">
           <div class="name">${q.screen_name}</div>
           <div class="sub">QR: ${q.qr_code} ${profileBadge}</div>
         </div>
-        <div style="display:flex;gap:4px">
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
           <button class="btn-sm bp" onclick="selectQr('${q.id}','${q.qr_code}','${q.screen_name.replace(/'/g,"\\'")}',${q.has_profile})">기준설정</button>
           ${q.has_profile?`<button class="btn-sm bg" onclick="quickJudge('${q.qr_code}','${q.screen_name.replace(/'/g,"\\'")}')">판정</button>`:''}
+          <button class="btn-sm bs" onclick="printQrLabel('${q.id}')">🖨️</button>
         </div>
       </div>`;
     }).join('');
+    // 일괄 출력 버튼
+    el.innerHTML+=`<div style="display:flex;gap:6px;margin-top:8px">
+      <button class="btn bs" style="flex:1" onclick="printQrSheet()">🖨️ 전체 QR 시트 출력</button>
+    </div>`;
   }catch(e){el.innerHTML=`<div style="color:#fca5a5">${e.message}</div>`}
 }
 
@@ -494,6 +499,56 @@ function quickJudge(code,name){
   const path=navStack.map(n=>n.name).join(' > ')+' > '+selEquipName;
   document.getElementById('judgeInfo').innerHTML=`📍 ${path}<br>🏷️ <b>${name}</b> (QR: ${code}) — <span style="color:#6ee7b7">프로필 로드됨</span>`;
   sw('judge');
+}
+
+// ═══ QR 라벨 출력 ═══
+function printQrLabel(qrPointId){
+  const url=API+`/api/qr/label/${qrPointId}?size=medium`;
+  const w=window.open('','_blank','width=800,height=600');
+  w.document.write(`<html><head><title>QR Label</title><style>
+    body{margin:0;display:flex;flex-direction:column;align-items:center;padding:20px;font-family:sans-serif}
+    img{max-width:100%;border:1px solid #ccc}
+    .actions{margin:16px 0;display:flex;gap:8px}
+    button{padding:10px 24px;border:none;border-radius:6px;font-size:14px;cursor:pointer}
+    .print-btn{background:#3b82f6;color:white}
+    .size-btn{background:#e2e8f0;color:#333}
+    .size-btn.active{background:#3b82f6;color:white}
+    @media print{.actions{display:none}}
+  </style></head><body>
+    <div class="actions">
+      <button class="print-btn" onclick="window.print()">🖨️ 인쇄</button>
+      <button class="size-btn active" onclick="setSize('small',this)">소</button>
+      <button class="size-btn" onclick="setSize('medium',this)">중</button>
+      <button class="size-btn" onclick="setSize('large',this)">대</button>
+    </div>
+    <img id="labelImg" src="${url}">
+    <script>
+    function setSize(s,btn){
+      document.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('labelImg').src='${API}/api/qr/label/${qrPointId}?size='+s;
+    }
+    </script>
+  </body></html>`);
+}
+
+function printQrSheet(){
+  if(!selEquipId)return;
+  const url=API+`/api/qr/sheet/${selEquipId}?size=medium`;
+  const w=window.open('','_blank','width=900,height=1200');
+  w.document.write(`<html><head><title>QR Sheet</title><style>
+    body{margin:0;display:flex;flex-direction:column;align-items:center;padding:20px;font-family:sans-serif}
+    img{max-width:100%;border:1px solid #ccc}
+    .actions{margin:16px 0;display:flex;gap:8px}
+    button{padding:10px 24px;border:none;border-radius:6px;font-size:14px;cursor:pointer}
+    .print-btn{background:#3b82f6;color:white}
+    @media print{.actions{display:none}}
+  </style></head><body>
+    <div class="actions">
+      <button class="print-btn" onclick="window.print()">🖨️ A4 인쇄</button>
+    </div>
+    <img src="${url}">
+  </body></html>`);
 }
 
 async function loadServerProfile(qrCode){

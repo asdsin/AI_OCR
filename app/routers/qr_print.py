@@ -13,6 +13,25 @@ from app.models import QrPoint, Equipment, Process, ProductionLine, Division, Co
 router = APIRouter(prefix="/api/qr", tags=["qr-print"])
 
 
+def _wrap_text(text: str, font, max_width: int) -> list[str]:
+    """텍스트를 최대 폭에 맞게 줄바꿈"""
+    words = text.replace(' > ', ' > ').split(' ')
+    lines, current = [], ''
+    for w in words:
+        test = (current + ' ' + w).strip() if current else w
+        try:
+            tw = font.getlength(test)
+        except AttributeError:
+            tw = len(test) * 8  # fallback
+        if tw <= max_width:
+            current = test
+        else:
+            if current: lines.append(current)
+            current = w
+    if current: lines.append(current)
+    return lines or [text]
+
+
 def _make_qr_image(data: str, box_size: int = 10) -> Image.Image:
     """QR 코드 이미지 생성"""
     qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -81,11 +100,12 @@ def _make_label(qr_code: str, equip_name: str, screen_name: str,
     draw.line([(tx, ty), (s["w"] - 10, ty)], fill="#cccccc", width=1)
     ty += 8
 
-    # 경로 (줄바꿈)
-    path_short = path if len(path) < 40 else path[:37] + "..."
-    draw.text((tx, ty), path_short, fill="#666666", font=font_sm)
-    ty += s["font_sm"] + 4
+    # 경로 (자동 줄바꿈)
+    for line in _wrap_text(path, font_sm, max_w):
+        draw.text((tx, ty), line, fill="#666666", font=font_sm)
+        ty += s["font_sm"] + 2
 
+    ty += 4
     # QR 코드값
     draw.text((tx, ty), f"QR: {qr_code}", fill="#999999", font=font_sm)
     ty += s["font_sm"] + 8

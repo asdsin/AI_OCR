@@ -125,23 +125,63 @@ label:first-child{margin-top:0}
   <div class="tab" onclick="sw('result')">📊 결과</div>
 </div>
 
-<!-- ═══ 1. 위치 + QR 관리 ═══ -->
+<!-- ═══ 1. 위치 + QR 관리 (콤보박스 방식) ═══ -->
 <div id="p-setup" class="pnl active">
   <div class="search-box">
     <span class="icon">🔍</span>
-    <input id="searchInput" placeholder="업체, 라인, 공정, 설비, QR 검색..." oninput="onSearch(this.value)">
+    <input id="searchInput" placeholder="업체, 설비, QR 빠른 검색..." oninput="onSearch(this.value)">
   </div>
   <div id="searchResults" style="display:none"></div>
-  <div id="treeSection">
-    <div class="path" id="pathBar"></div>
-    <div id="treeView"></div>
-  </div>
-  <!-- 설비 선택 시 QR 포인트 관리 영역 -->
-  <div id="qrSection" style="display:none">
-    <div class="card">
-      <div class="card-title">📟 <span id="qrEquipName"></span></div>
-      <div style="font-size:11px;color:#64748b;margin-bottom:8px" id="qrEquipMeta"></div>
+
+  <div id="comboSection">
+    <!-- 업체 -->
+    <div class="card" style="padding:8px 12px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <label style="margin:0;min-width:50px">🏢 업체</label>
+        <select class="inp" id="selCompany" onchange="onCompanyChange()" style="flex:1;margin:0"></select>
+        <button class="btn-sm bg" onclick="openAdd('company')" style="white-space:nowrap">+</button>
+      </div>
     </div>
+
+    <!-- 사업부 (선택) -->
+    <div class="card" style="padding:8px 12px" id="divRow">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <label style="margin:0;min-width:50px">🏭 사업부</label>
+        <select class="inp" id="selDivision" onchange="onDivisionChange()" style="flex:1;margin:0"></select>
+        <button class="btn-sm bg" onclick="openAdd('division')" style="white-space:nowrap">+</button>
+      </div>
+    </div>
+
+    <!-- 라인 -->
+    <div class="card" style="padding:8px 12px;display:none" id="lineRow">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <label style="margin:0;min-width:50px">🔧 라인</label>
+        <select class="inp" id="selLine" onchange="onLineChange()" style="flex:1;margin:0"></select>
+        <button class="btn-sm bg" onclick="openAdd('line')" style="white-space:nowrap">+</button>
+      </div>
+    </div>
+
+    <!-- 공정 -->
+    <div class="card" style="padding:8px 12px;display:none" id="procRow">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <label style="margin:0;min-width:50px">⚙️ 공정</label>
+        <select class="inp" id="selProcess" onchange="onProcessChange()" style="flex:1;margin:0"></select>
+        <button class="btn-sm bg" onclick="openAdd('process')" style="white-space:nowrap">+</button>
+      </div>
+    </div>
+
+    <!-- 설비 -->
+    <div class="card" style="padding:8px 12px;display:none" id="equipRow">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <label style="margin:0;min-width:50px">📟 설비</label>
+        <select class="inp" id="selEquipment" onchange="onEquipmentChange()" style="flex:1;margin:0"></select>
+        <button class="btn-sm bg" onclick="openAdd('equipment')" style="white-space:nowrap">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR 포인트 관리 -->
+  <div id="qrSection" style="display:none">
     <div class="card">
       <div class="card-title">🏷️ QR 포인트 <button class="btn-sm bg" onclick="openQrAdd()">+ QR 추가</button></div>
       <div id="qrList"></div>
@@ -323,7 +363,7 @@ function sw(t){
   });
   document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('active'));
   document.getElementById('p-'+t).classList.add('active');
-  if(t==='setup'){document.getElementById('qrSection').style.display=selEquipId?'block':'none';renderTree()}
+  if(t==='setup'){document.getElementById('qrSection').style.display=selEquipId?'block':'none'}
 }
 
 async function checkSrv(){
@@ -377,7 +417,7 @@ async function doSearch(q){
 }
 function pickSR(i){
   const r=window._searchResults[i];if(!r)return;
-  navStack=r.path.filter(p=>p.level!=='equipment').map(p=>({level:p.level,id:p.id,name:p.name}));
+  // 검색 결과에서 콤보박스 자동 설정은 향후 개선
   document.getElementById('searchInput').value='';
   document.getElementById('searchResults').style.display='none';
   document.getElementById('treeSection').style.display='block';
@@ -392,93 +432,132 @@ function pickSR(i){
     return;
   }
   if(r.match_level==='equipment'&&r.equipment){selectEquip(r.equipment.id,r.equipment.name);return}
-  renderTree();
 }
-
-// ═══ 트리 ═══
-const LEVELS=[
-  {key:'company',label:'업체',icon:'🏢',api:'/api/master/companies',childKey:'division_count'},
-  {key:'division',label:'사업부',icon:'🏭',api:'/api/master/divisions',parentParam:'company_id',childKey:'line_count'},
-  {key:'line',label:'라인',icon:'🔧',api:'/api/master/lines',parentParam:'division_id',childKey:'process_count'},
-  {key:'process',label:'공정',icon:'⚙️',api:'/api/master/processes',parentParam:'line_id',childKey:'equipment_count'},
-  {key:'equipment',label:'설비',icon:'📟',api:'/api/master/equipments',parentParam:'process_id'},
-];
-function curLevel(){return navStack.length}
-async function renderTree(){
-  const lv=curLevel();
-  document.getElementById('pathBar').innerHTML=navStack.map((n,i)=>
-    `<div class="path-chip">${n.name} <span class="x" onclick="navTo(${i})">&times;</span></div>`
-  ).join('<span style="color:#475569;font-size:10px">›</span>');
-  const tv=document.getElementById('treeView');
-  if(lv>=LEVELS.length){tv.innerHTML='';return}
-  const L=LEVELS[lv];
-  let url=L.api;
-  if(L.parentParam&&navStack.length>0)url+=`?${L.parentParam}=${navStack[navStack.length-1].id}`;
-  try{
-    const items=await api(url);
-    let h='';
-    for(const it of items){
-      const sub=it[L.childKey]!=null?`${it[L.childKey]}개`:(it.plc_type||it.equipment_type||'');
-      const click=lv===4?`selectEquip('${it.id}','${(it.name||'').replace(/'/g,"\\'")}')`:`drillDown('${it.id}','${(it.name||it.code).replace(/'/g,"\\'")}')`;
-      h+=`<div class="tree-item" onclick="${click}">
-        <div class="tree-icon">${L.icon}</div>
-        <div class="tree-info"><div class="name">${it.name||it.code}</div><div class="sub">${it.code} ${sub?'· '+sub:''}</div></div>
-        ${lv<4?'<div style="color:#64748b">›</div>':'<div style="font-size:11px;color:#3b82f6">기준설정 →</div>'}
-      </div>`;
-    }
-    h+=`<div class="tree-item tree-add" onclick="openAdd('${L.key}')">+ ${L.label} 추가</div>`;
-
-    // 사업부/라인/공정이 비어있으면 건너뛰기 옵션 표시
-    if(items.length===0 && lv>=1 && lv<=3){
-      const skipTarget=LEVELS[lv+1];
-      if(skipTarget){
-        h+=`<div class="tree-item" onclick="skipLevel('${L.key}')" style="border:1px dashed #3b82f6;justify-content:center;color:#60a5fa;font-size:12px">
-          ⏭ ${L.label} 없이 ${skipTarget.label} 바로 추가
-        </div>`;
-      }
-    }
-
-    tv.innerHTML=h;
-  }catch(e){
-    tv.innerHTML=`<div style="padding:16px">
-      <div style="color:#fca5a5;margin-bottom:8px">⚠ 연결 실패</div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:8px">${e.message}</div>
-      <div style="font-size:11px;color:#475569">서버: ${API}</div>
-      <button class="btn bp" style="margin-top:8px" onclick="renderTree()">재시도</button>
-    </div>`;
-  }
-}
-
-async function skipLevel(levelKey){
-  // 현재 레벨을 "기본" 이름으로 자동 생성하고 건너뛰기
-  const L=LEVELS.find(l=>l.key===levelKey);
-  const parentId=navStack.length>0?navStack[navStack.length-1].id:null;
-  const parentName=navStack.length>0?navStack[navStack.length-1].name:'';
-  const defaultName=parentName?`${parentName} (기본)`:'기본';
-  const defaultCode=`default-${Date.now().toString(36)}`;
-
-  const body={code:defaultCode, name:defaultName};
-  if(L.parentParam&&parentId) body[L.parentParam]=parentId;
-
-  try{
-    const created=await api(L.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    // 생성된 항목으로 진입
-    drillDown(created.id, defaultName);
-  }catch(e){alert('자동 생성 실패: '+e.message)}
-}
-function drillDown(id,name){navStack.push({level:LEVELS[curLevel()].key,id,name});renderTree()}
-function navTo(i){navStack=navStack.slice(0,i);renderTree()}
 
 function selectEquip(id,name){
   selEquipId=id;selEquipName=name;
   selQrId=null;selQrCode='';selQrName='';
-  // QR 포인트 목록 표시
   document.getElementById('qrSection').style.display='block';
-  document.getElementById('qrEquipName').textContent=name;
-  document.getElementById('qrEquipMeta').textContent=navStack.map(n=>n.name).join(' > ');
   loadQrPoints();
 }
 
+// ═══ 콤보박스 드릴다운 ═══
+const COMBO={
+  company:{sel:'selCompany',api:'/api/master/companies',nextRow:'divRow',next:'division'},
+  division:{sel:'selDivision',api:'/api/master/divisions',param:'company_id',nextRow:'lineRow',next:'line'},
+  line:{sel:'selLine',api:'/api/master/lines',param:'division_id',nextRow:'procRow',next:'process'},
+  process:{sel:'selProcess',api:'/api/master/processes',param:'line_id',nextRow:'equipRow',next:'equipment'},
+  equipment:{sel:'selEquipment',api:'/api/master/equipments',param:'process_id'},
+};
+
+async function loadCombo(level, parentId){
+  const c=COMBO[level];if(!c)return;
+  const sel=document.getElementById(c.sel);
+  sel.innerHTML='<option value="">-- 선택 --</option>';
+  // 하위 콤보 초기화
+  const chain=['division','line','process','equipment'];
+  const startIdx=chain.indexOf(level);
+  if(startIdx>=0){
+    for(let i=startIdx+1;i<chain.length;i++){
+      const cc=COMBO[chain[i]];
+      document.getElementById(cc.sel).innerHTML='<option value="">-- 선택 --</option>';
+      if(COMBO[chain[i-1]]?.nextRow)document.getElementById(COMBO[chain[i]]?.sel)?.closest('.card')?.style&&(document.getElementById(COMBO[chain[i]].sel).closest('.card').style.display='none');
+    }
+  }
+  document.getElementById('qrSection').style.display='none';
+
+  let url=c.api;
+  if(c.param&&parentId)url+=`?${c.param}=${parentId}`;
+  try{
+    const items=await api(url);
+    items.forEach(it=>{
+      const opt=document.createElement('option');
+      opt.value=it.id;
+      opt.textContent=it.name||it.code;
+      sel.appendChild(opt);
+    });
+    // 건너뛰기: 항목이 0개면 자동 생성 옵션
+    if(items.length===0 && parentId && c.nextRow){
+      const opt=document.createElement('option');
+      opt.value='__skip__';
+      opt.textContent=`⏭ (기본) 자동 생성`;
+      sel.appendChild(opt);
+    }
+  }catch(e){console.error(e)}
+}
+
+async function onCompanyChange(){
+  const v=document.getElementById('selCompany').value;
+  if(!v){document.getElementById('divRow').querySelector('.card')&&(document.getElementById('divRow').style.display='block');return}
+  document.getElementById('divRow').style.display='block';
+  await loadCombo('division',v);
+}
+async function onDivisionChange(){
+  let v=document.getElementById('selDivision').value;
+  if(v==='__skip__'){v=await autoCreate('division');if(!v)return}
+  if(!v)return;
+  document.getElementById('lineRow').style.display='block';
+  await loadCombo('line',v);
+}
+async function onLineChange(){
+  let v=document.getElementById('selLine').value;
+  if(v==='__skip__'){v=await autoCreate('line');if(!v)return}
+  if(!v)return;
+  document.getElementById('procRow').style.display='block';
+  await loadCombo('process',v);
+}
+async function onProcessChange(){
+  let v=document.getElementById('selProcess').value;
+  if(v==='__skip__'){v=await autoCreate('process');if(!v)return}
+  if(!v)return;
+  document.getElementById('equipRow').style.display='block';
+  await loadCombo('equipment',v);
+}
+function onEquipmentChange(){
+  const sel=document.getElementById('selEquipment');
+  const v=sel.value;if(!v)return;
+  selEquipId=v;selEquipName=sel.options[sel.selectedIndex].textContent;
+  selQrId=null;selQrCode='';selQrName='';
+  document.getElementById('qrSection').style.display='block';
+  loadQrPoints();
+}
+
+async function autoCreate(level){
+  const c=COMBO[level];
+  const parentSel=document.getElementById(COMBO[{division:'company',line:'division',process:'line'}[level]].sel);
+  const parentName=parentSel.options[parentSel.selectedIndex]?.textContent||'기본';
+  const body={code:`default-${Date.now().toString(36)}`,name:`${parentName} (기본)`};
+  if(c.param){
+    const parentVal={division:'selCompany',line:'selDivision',process:'selLine'}[level];
+    body[c.param]=document.getElementById(parentVal).value;
+  }
+  try{
+    const created=await api(c.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    // 콤보 리로드 후 선택
+    const sel=document.getElementById(c.sel);
+    const opt=document.createElement('option');opt.value=created.id;opt.textContent=body.name;
+    sel.insertBefore(opt,sel.lastChild);sel.value=created.id;
+    return created.id;
+  }catch(e){alert('생성 실패: '+e.message);return null}
+}
+
+// 경로 헬퍼
+function _getPath(){
+  const parts=[];
+  ['selCompany','selDivision','selLine','selProcess','selEquipment'].forEach(id=>{
+    const s=document.getElementById(id);
+    if(s&&s.value&&s.value!=='__skip__'){
+      const txt=s.options[s.selectedIndex]?.textContent;
+      if(txt&&!txt.startsWith('--'))parts.push(txt);
+    }
+  });
+  return parts.join(' > ');
+}
+
+// 초기 로드
+async function initCombos(){await loadCombo('company')}
+
+// QR 포인트 목록
 async function loadQrPoints(){
   const el=document.getElementById('qrList');
   try{
@@ -488,32 +567,45 @@ async function loadQrPoints(){
       return;
     }
     el.innerHTML=qrs.map(q=>{
-      const profileBadge=q.has_profile
-        ?`<span class="badge ok" style="font-size:10px">${q.rules_count}개 항목</span>`
-        :'<span class="badge ng" style="font-size:10px">미설정</span>';
+      const pb=q.has_profile?`<span class="badge ok" style="font-size:10px">${q.rules_count}개</span>`:'<span class="badge ng" style="font-size:10px">미설정</span>';
       return `<div class="tree-item" style="border-left:3px solid ${q.has_profile?'#22c55e':'#64748b'};flex-wrap:wrap">
         <div class="tree-icon">🏷️</div>
-        <div class="tree-info">
-          <div class="name">${q.screen_name}</div>
-          <div class="sub">QR: ${q.qr_code} ${profileBadge}</div>
-        </div>
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn-sm bp" onclick="selectQr('${q.id}','${q.qr_code}','${q.screen_name.replace(/'/g,"\\'")}',${q.has_profile})">기준설정</button>
+        <div class="tree-info"><div class="name">${q.screen_name}</div><div class="sub">QR: ${q.qr_code} ${pb}</div></div>
+        <div style="display:flex;gap:3px;flex-wrap:wrap">
+          <button class="btn-sm bp" onclick="selectQr('${q.id}','${q.qr_code}','${q.screen_name.replace(/'/g,"\\'")}',${q.has_profile})">기준</button>
           ${q.has_profile?`<button class="btn-sm bg" onclick="quickJudge('${q.qr_code}','${q.screen_name.replace(/'/g,"\\'")}')">판정</button>`:''}
           <button class="btn-sm bs" onclick="printQrLabel('${q.id}')">🖨️</button>
+          <button class="btn-sm bs" onclick="copyQrImage('${q.id}')" title="이미지 복사">📋</button>
         </div>
       </div>`;
     }).join('');
-    // 일괄 출력 버튼
     el.innerHTML+=`<div style="display:flex;gap:6px;margin-top:8px">
-      <button class="btn bs" style="flex:1" onclick="printQrSheet()">🖨️ 전체 QR 시트 출력</button>
+      <button class="btn bs" style="flex:1" onclick="printQrSheet()">🖨️ 전체 시트</button>
+      <button class="btn bs" style="flex:1" onclick="copyAllQrImages()">📋 전체 복사</button>
     </div>`;
   }catch(e){el.innerHTML=`<div style="color:#fca5a5">${e.message}</div>`}
 }
 
+// QR 이미지 복사
+async function copyQrImage(qrPointId){
+  try{
+    const res=await fetch(API+`/api/qr/label/${qrPointId}?size=medium`);
+    const blob=await res.blob();
+    await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+    alert('QR 라벨 이미지가 클립보드에 복사되었습니다');
+  }catch(e){
+    // 클립보드 API 미지원 시 새 탭으로 열기
+    window.open(API+`/api/qr/label/${qrPointId}?size=large`,'_blank');
+  }
+}
+async function copyAllQrImages(){
+  if(!selEquipId)return;
+  window.open(API+`/api/qr/sheet/${selEquipId}?size=medium`,'_blank');
+}
+
 function selectQr(id,code,name,hasProfile){
   selQrId=id;selQrCode=code;selQrName=name;
-  const path=navStack.map(n=>n.name).join(' > ')+' > '+selEquipName;
+  const path=_getPath();
   document.getElementById('refEquipInfo').innerHTML=`📍 ${path}`;
   document.getElementById('refQrInfo').textContent=`🏷️ ${name} (QR: ${code})`;
   if(hasProfile)loadServerProfile(code);
@@ -525,7 +617,7 @@ function quickJudge(code,name){
   selQrCode=code;selQrName=name;
   loadServerProfile(code);
   document.getElementById('judgeQrInput').value=code;
-  const path=navStack.map(n=>n.name).join(' > ')+' > '+selEquipName;
+  const path=_getPath();
   document.getElementById('judgeInfo').innerHTML=`📍 ${path}<br>🏷️ <b>${name}</b> (QR: ${code}) — <span style="color:#6ee7b7">프로필 로드됨</span>`;
   sw('judge');
 }
@@ -887,7 +979,7 @@ async function saveProfile(){
   // 로컬에도 백업
   localStorage.setItem(`profile_${selQrCode||selEquipId||'default'}`,JSON.stringify(profileData));
 
-  const path=navStack.map(n=>n.name).join(' > ')+' > '+selEquipName;
+  const path=_getPath();
   alert(`✅ ${rules.length}개 판정항목 저장 완료\n🏷️ QR: ${selQrCode||'-'}\n이제 판정 탭에서 촬영하세요`);
   document.getElementById('judgeQrInput').value=selQrCode;
   document.getElementById('judgeInfo').innerHTML=`📍 ${path}<br>🏷️ <b>${selQrName}</b> (QR: ${selQrCode}) — <span style="color:#6ee7b7">${rules.length}개 판정항목</span>`;
@@ -900,7 +992,7 @@ function loadProfile(){
   if(saved){
     const p=JSON.parse(saved);
     profileRules=p.rules||[];
-    document.getElementById('judgeInfo').innerHTML=`📍 ${navStack.map(n=>n.name).join(' > ')} > <b>${selEquipName}</b><br><span style="color:#6ee7b7">${profileRules.length}개 판정항목 설정됨</span>`;
+    document.getElementById('judgeInfo').innerHTML=`📍 ${_getPath()} > <b>${selEquipName}</b><br><span style="color:#6ee7b7">${profileRules.length}개 판정항목 설정됨</span>`;
   } else {
     profileRules=[];
   }
@@ -1027,7 +1119,7 @@ async function submitJudge(){
     if(!res.ok)throw new Error(`${res.status}`);
     const data=await res.json();
     if(profileRules.length>0)applyProfileJudgment(data);
-    data._path=navStack.map(n=>n.name).join(' > ')+(selEquipName?' > '+selEquipName:'');
+    data._path=_getPath()+(selEquipName?' > '+selEquipName:'');
     data._time=new Date().toLocaleString('ko-KR');
     showResult(data);sw('result');
   }catch(err){alert('판정 실패: '+err.message)}
@@ -1308,18 +1400,29 @@ async function saveM1(){
     closeM1();loadQrPoints();}catch(e){alert('저장 실패: '+e.message)}
     return;
   }
-  const L=LEVELS.find(l=>l.key===addLevel);
+  const C=COMBO[addLevel];if(!C){closeM1();return}
   const body={code:document.getElementById('a_code')?.value,name:document.getElementById('a_name')?.value};
   if(!body.code||!body.name){alert('코드/이름 필수');return}
-  if(L.parentParam&&navStack.length>0)body[L.parentParam]=navStack[navStack.length-1].id;
-  ['industry','location','line_type','process_type','equipment_type','plc_type','qr_code'].forEach(f=>{
+  // 부모 ID를 현재 콤보박스에서 가져오기
+  const parentMap={division:'selCompany',line:'selDivision',process:'selLine',equipment:'selProcess'};
+  if(C.param&&parentMap[addLevel]){
+    body[C.param]=document.getElementById(parentMap[addLevel])?.value;
+  }
+  ['industry','location','line_type','process_type','equipment_type','plc_type'].forEach(f=>{
     const el=document.getElementById('a_'+f);if(el)body[f]=el.value;
   });
-  await api(L.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  closeM1();renderTree();
+  await api(C.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  closeM1();
+  // 해당 레벨 콤보 리로드
+  if(parentMap[addLevel]){
+    const parentVal=document.getElementById(parentMap[addLevel])?.value;
+    await loadCombo(addLevel,parentVal);
+  } else {
+    await initCombos();
+  }
 }
 
-renderTree();
+initCombos();
 </script>
 </body>
 </html>

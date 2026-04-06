@@ -321,6 +321,58 @@ async def analyze_reference(image: UploadFile = File(...)):
         raise HTTPException(500, f"분석 실패: {str(e)}")
 
 
+@router.post("/ocr/test-zone")
+async def test_zone_ocr(
+    image: UploadFile = File(...),
+    x_pct: float = Form(0), y_pct: float = Form(0),
+    w_pct: float = Form(100), h_pct: float = Form(100),
+):
+    """
+    특정 영역만 크롭하여 OCR 테스트
+    기준설정에서 영역 범위를 조정하며 실시간 인식 확인용
+    """
+    try:
+        contents = await image.read()
+        nparr = np.frombuffer(contents, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            raise HTTPException(400, "이미지 디코딩 실패")
+
+        screen, _ = detect_screen(img)
+        h, w = screen.shape[:2]
+
+        # 영역 크롭
+        x = max(0, int(w * x_pct / 100))
+        y = max(0, int(h * y_pct / 100))
+        cw = max(1, int(w * w_pct / 100))
+        ch = max(1, int(h * h_pct / 100))
+        cropped = screen[y:y+ch, x:x+cw]
+
+        # OCR
+        loop = asyncio.get_event_loop()
+        ocr_result = await loop.run_in_executor(
+            _ocr_thread_pool, smart_ocr.extract_all, cropped
+        )
+
+        # 크롭 이미지 base64
+        _, buf = cv2.imencode('.jpg', cropped, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        crop_b64 = base64.b64encode(buf).decode('utf-8')
+
+        return {
+            "crop_image": crop_b64,
+            "crop_size": {"w": cw, "h": ch},
+            "zone": {"x_pct": x_pct, "y_pct": y_pct, "w_pct": w_pct, "h_pct": h_pct},
+            "detected_items": ocr_result,
+            "total_detected": len(ocr_result),
+            "numeric_count": sum(1 for it in ocr_result if it.get("is_numeric")),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"영역 OCR 테스트 에러: {e}", exc_info=True)
+        raise HTTPException(500, f"테스트 실패: {str(e)}")
+
+
 # ── Smart OCR (영역 좌표 없이 자동 판정) ──
 
 @router.post("/ocr/smart")

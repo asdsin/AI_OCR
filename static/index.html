@@ -192,9 +192,10 @@ label:first-child{margin-top:0}
 <!-- ═══ 2. 기준설정 (시각 분석) ═══ -->
 <div id="p-ref" class="pnl">
   <div class="step-bar">
-    <div class="step" id="st1">① 기준 사진</div>
-    <div class="step" id="st2">② 항목 선택</div>
-    <div class="step" id="st3">③ 조건 입력</div>
+    <div class="step" id="st1">① 촬영</div>
+    <div class="step" id="st2">② 영역</div>
+    <div class="step" id="st3">③ 항목</div>
+    <div class="step" id="st4">④ 조건</div>
   </div>
 
   <!-- Step 1: 기준 사진 촬영 (라이브 카메라) -->
@@ -242,8 +243,54 @@ label:first-child{margin-top:0}
     </div>
   </div>
 
-  <!-- Step 2: 항목 선택 (시각 오버레이) -->
+  <!-- Step 2: 영역 조정 + OCR 테스트 -->
   <div id="refStep2" style="display:none">
+    <div class="card" style="padding:8px">
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">🔲 인식 영역을 드래그로 조정하고 <b>테스트</b>를 눌러 확인하세요</div>
+    </div>
+
+    <!-- 기준 이미지 + 드래그 영역 박스 -->
+    <div class="analyze-wrap" id="zoneWrap" style="touch-action:none;user-select:none">
+      <img id="zoneBaseImg">
+      <div id="zoneDragBox" style="position:absolute;border:2px dashed #3b82f6;background:rgba(59,130,246,0.1);cursor:move;border-radius:4px"></div>
+      <!-- 리사이즈 핸들 -->
+      <div id="zoneResizeHandle" style="position:absolute;width:20px;height:20px;background:#3b82f6;border-radius:50%;cursor:nwse-resize;right:-10px;bottom:-10px;z-index:5"></div>
+    </div>
+
+    <!-- 영역 수치 표시/입력 -->
+    <div class="card" style="padding:8px">
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;font-size:12px">
+        <span style="color:#94a3b8">X:</span><input class="inp" id="zoneX" type="number" value="0" style="width:55px;padding:4px;margin:0;font-size:12px" onchange="updateZoneFromInputs()">
+        <span style="color:#94a3b8">Y:</span><input class="inp" id="zoneY" type="number" value="0" style="width:55px;padding:4px;margin:0;font-size:12px" onchange="updateZoneFromInputs()">
+        <span style="color:#94a3b8">W:</span><input class="inp" id="zoneW" type="number" value="100" style="width:55px;padding:4px;margin:0;font-size:12px" onchange="updateZoneFromInputs()">
+        <span style="color:#94a3b8">H:</span><input class="inp" id="zoneH" type="number" value="100" style="width:55px;padding:4px;margin:0;font-size:12px" onchange="updateZoneFromInputs()">
+        <span style="color:#64748b">(%)</span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <button class="btn bp" style="flex:1" onclick="testZoneOcr()">🔍 영역 OCR 테스트</button>
+      <button class="btn bs" style="flex:0 0 auto;padding:12px" onclick="resetZone()">↺ 전체</button>
+    </div>
+
+    <!-- 테스트 결과 -->
+    <div id="zoneTestResult" style="display:none">
+      <div class="card" style="padding:8px">
+        <div class="card-title" style="margin-bottom:4px">🔍 테스트 결과 <span id="zoneTestCount" style="color:#6ee7b7"></span></div>
+        <div id="zoneTestImg" style="margin-bottom:6px;border-radius:6px;overflow:hidden"></div>
+        <div id="zoneTestValues" style="max-height:30vh;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <div id="zoneTestLoading" class="loading" style="display:none">
+      <div class="spinner"></div><p style="margin-top:6px;color:#94a3b8;font-size:12px">영역 OCR 중...</p>
+    </div>
+
+    <button class="btn bg" onclick="confirmZoneAndAnalyze()">✅ 이 영역으로 확정 → 항목 선택</button>
+  </div>
+
+  <!-- Step 3: 항목 선택 (시각 오버레이) -->
+  <div id="refStep3" style="display:none">
     <div class="card" style="padding:8px">
       <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">📌 판정할 항목을 터치하세요 (수치 = 파랑, 선택됨 = 초록)</div>
       <div style="display:flex;gap:4px;margin-bottom:6px">
@@ -253,18 +300,18 @@ label:first-child{margin-top:0}
     </div>
     <div class="analyze-wrap" id="analyzeWrap"></div>
     <div id="selectedList"></div>
-    <button class="btn bg" onclick="goStep3()" id="btnStep3" disabled>선택 완료 → 조건 입력</button>
+    <button class="btn bg" onclick="goStep4()" id="btnStep3" disabled>선택 완료 → 조건 입력</button>
   </div>
 
-  <!-- Step 3: 조건 입력 -->
-  <div id="refStep3" style="display:none">
+  <!-- Step 4: 조건 입력 -->
+  <div id="refStep4" style="display:none">
     <div class="card">
       <div class="card-title">⚙️ 판정 조건 설정</div>
       <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">선택한 항목의 OK/NG 조건을 입력하세요</div>
     </div>
     <div id="conditionList"></div>
     <button class="btn bg" onclick="saveProfile()">💾 프로필 저장</button>
-    <button class="btn bs" onclick="goStep2()">← 항목 다시 선택</button>
+    <button class="btn bs" onclick="goStep3()">← 항목 다시 선택</button>
   </div>
 </div>
 
@@ -773,10 +820,12 @@ let _refBlob=null;
 function setStep(n){
   document.getElementById('st1').className='step '+(n===1?'active':n>1?'done':'');
   document.getElementById('st2').className='step '+(n===2?'active':n>2?'done':'');
-  document.getElementById('st3').className='step '+(n===3?'active':'');
+  document.getElementById('st3').className='step '+(n===3?'active':n>3?'done':'');
+  document.getElementById('st4').className='step '+(n===4?'active':'');
   document.getElementById('refStep1').style.display=n===1?'block':'none';
   document.getElementById('refStep2').style.display=n===2?'block':'none';
   document.getElementById('refStep3').style.display=n===3?'block':'none';
+  document.getElementById('refStep4').style.display=n===4?'block':'none';
 }
 
 async function startRefCam(){
@@ -819,12 +868,133 @@ async function submitRef(){
     if(!res.ok)throw new Error(`${res.status}`);
     analyzeData=await res.json();
     selectedItems=new Set();
-    renderAnalyze();
+    // Step2: 영역 조정 화면에 기준 이미지 표시
+    initZoneEditor();
     setStep(2);
   }catch(err){
     alert('분석 실패: '+err.message);
     document.getElementById('refStartBtns').style.display='block';
   }finally{document.getElementById('refAnalyzing').style.display='none'}
+}
+
+// ═══ Step 2: 영역 조정 + OCR 테스트 ═══
+let _zone={x:0,y:0,w:100,h:100};
+let _dragging=false, _resizing=false, _dragStart={};
+
+function initZoneEditor(){
+  if(!analyzeData)return;
+  const img=document.getElementById('zoneBaseImg');
+  img.src='data:image/jpeg;base64,'+analyzeData.screen_image;
+  _zone={x:0,y:0,w:100,h:100};
+  updateZoneBox();
+  updateZoneInputs();
+  // 터치/마우스 드래그 이벤트
+  const wrap=document.getElementById('zoneWrap');
+  const box=document.getElementById('zoneDragBox');
+  const handle=document.getElementById('zoneResizeHandle');
+
+  wrap.onpointerdown=function(e){
+    if(e.target===handle){_resizing=true}
+    else if(e.target===box||box.contains(e.target)){_dragging=true}
+    else return;
+    _dragStart={px:e.clientX,py:e.clientY,z:{..._zone}};
+    e.preventDefault();
+  };
+  document.onpointermove=function(e){
+    if(!_dragging&&!_resizing)return;
+    const rect=wrap.getBoundingClientRect();
+    const dx=(e.clientX-_dragStart.px)/rect.width*100;
+    const dy=(e.clientY-_dragStart.py)/rect.height*100;
+    if(_dragging){
+      _zone.x=Math.max(0,Math.min(100-_zone.w, _dragStart.z.x+dx));
+      _zone.y=Math.max(0,Math.min(100-_zone.h, _dragStart.z.y+dy));
+    }else if(_resizing){
+      _zone.w=Math.max(5,Math.min(100-_zone.x, _dragStart.z.w+dx));
+      _zone.h=Math.max(5,Math.min(100-_zone.y, _dragStart.z.h+dy));
+    }
+    updateZoneBox();updateZoneInputs();
+  };
+  document.onpointerup=function(){_dragging=false;_resizing=false};
+}
+
+function updateZoneBox(){
+  const box=document.getElementById('zoneDragBox');
+  const handle=document.getElementById('zoneResizeHandle');
+  box.style.left=_zone.x+'%';box.style.top=_zone.y+'%';
+  box.style.width=_zone.w+'%';box.style.height=_zone.h+'%';
+  handle.style.left=(_zone.x+_zone.w)+'%';handle.style.top=(_zone.y+_zone.h)+'%';
+  handle.style.transform='translate(-50%,-50%)';
+}
+function updateZoneInputs(){
+  document.getElementById('zoneX').value=Math.round(_zone.x);
+  document.getElementById('zoneY').value=Math.round(_zone.y);
+  document.getElementById('zoneW').value=Math.round(_zone.w);
+  document.getElementById('zoneH').value=Math.round(_zone.h);
+}
+function updateZoneFromInputs(){
+  _zone.x=parseFloat(document.getElementById('zoneX').value)||0;
+  _zone.y=parseFloat(document.getElementById('zoneY').value)||0;
+  _zone.w=parseFloat(document.getElementById('zoneW').value)||100;
+  _zone.h=parseFloat(document.getElementById('zoneH').value)||100;
+  updateZoneBox();
+}
+function resetZone(){_zone={x:0,y:0,w:100,h:100};updateZoneBox();updateZoneInputs()}
+
+async function testZoneOcr(){
+  if(!_refBlob)return;
+  document.getElementById('zoneTestResult').style.display='none';
+  document.getElementById('zoneTestLoading').style.display='block';
+  const form=new FormData();
+  form.append('image',_refBlob);
+  form.append('x_pct',_zone.x);form.append('y_pct',_zone.y);
+  form.append('w_pct',_zone.w);form.append('h_pct',_zone.h);
+  try{
+    const res=await fetch(API+'/api/ocr/test-zone',{method:'POST',body:form});
+    if(!res.ok)throw new Error(`${res.status}`);
+    const data=await res.json();
+    // 결과 표시
+    document.getElementById('zoneTestResult').style.display='block';
+    document.getElementById('zoneTestCount').textContent=`(${data.numeric_count}개 수치 / ${data.total_detected}개 전체)`;
+    document.getElementById('zoneTestImg').innerHTML=`<img src="data:image/jpeg;base64,${data.crop_image}" style="width:100%;border-radius:4px">`;
+    document.getElementById('zoneTestValues').innerHTML=data.detected_items.map(it=>{
+      const c=it.is_numeric?'color:#6ee7b7':'color:#94a3b8';
+      const tag=it.is_noise?'<span style="color:#ef4444;font-size:9px">노이즈</span>':'';
+      return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #0f172a;font-size:12px">
+        <span style="font-weight:700;min-width:50px;${c}">${it.is_numeric?it.value?.toFixed(1):'—'}</span>
+        <span style="flex:1;color:#94a3b8">${it.text}</span>
+        ${tag}
+        <span style="color:#64748b;font-size:10px">${(it.confidence*100).toFixed(0)}%</span>
+      </div>`;
+    }).join('');
+  }catch(e){alert('테스트 실패: '+e.message)}
+  finally{document.getElementById('zoneTestLoading').style.display='none'}
+}
+
+async function confirmZoneAndAnalyze(){
+  // 현재 영역으로 전체 분석 재실행 (영역이 100%가 아니면 크롭된 것 기준)
+  if(_zone.x===0&&_zone.y===0&&_zone.w===100&&_zone.h===100){
+    // 전체 영역 → 기존 analyzeData 사용
+    renderAnalyze();setStep(3);return;
+  }
+  // 영역 크롭된 결과로 analyzeData 갱신
+  if(!_refBlob)return;
+  document.getElementById('zoneTestLoading').style.display='block';
+  const form=new FormData();form.append('image',_refBlob);
+  form.append('x_pct',_zone.x);form.append('y_pct',_zone.y);
+  form.append('w_pct',_zone.w);form.append('h_pct',_zone.h);
+  try{
+    const res=await fetch(API+'/api/ocr/test-zone',{method:'POST',body:form});
+    if(!res.ok)throw new Error(`${res.status}`);
+    const data=await res.json();
+    // analyzeData 갱신
+    analyzeData.detected_items=data.detected_items;
+    analyzeData.total_detected=data.total_detected;
+    analyzeData.screen_image=data.crop_image;
+    analyzeData._zone={..._zone};
+    selectedItems=new Set();
+    renderAnalyze();setStep(3);
+  }catch(e){alert('분석 실패: '+e.message)}
+  finally{document.getElementById('zoneTestLoading').style.display='none'}
 }
 
 function renderAnalyze(){
@@ -874,9 +1044,9 @@ function updateSelectedList(){
     '</div>';
 }
 
-// ═══ Step 3: 조건 입력 ═══
-function goStep3(){
-  setStep(3);
+// ═══ Step 4: 조건 입력 ═══
+function goStep4(){
+  setStep(4);
   const cl=document.getElementById('conditionList');
   const items=[...selectedItems].map(i=>analyzeData.detected_items[i]);
   cl.innerHTML=items.map((it,idx)=>`
@@ -925,7 +1095,8 @@ function toggleCondFields(sel){
   else{range.style.display='none';single.style.display='block'}
 }
 
-function goStep2(){setStep(2);renderAnalyze()}
+function goStep3(){setStep(3);renderAnalyze()}
+function goStep2(){setStep(2);initZoneEditor()}
 
 // ═══ 프로필 저장 ═══
 async function saveProfile(){

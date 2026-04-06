@@ -38,6 +38,60 @@ async def create_qr_point(data: QrPointIn, db: AsyncSession = Depends(get_db)):
     return _qr_dict(obj)
 
 
+@router.get("/points/all")
+async def list_all_qr_points(
+    company_id: str | None = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """전체 QR 포인트 목록 (경로 포함) — 테이블 뷰용"""
+    stmt = select(QrPoint).where(QrPoint.is_active == True)
+    qr_points = (await db.execute(stmt)).scalars().all()
+
+    results = []
+    for qp in qr_points:
+        eq = await db.get(Equipment, qp.equipment_id) if qp.equipment_id else None
+        if not eq or not eq.is_active: continue
+
+        # 경로 역추적
+        proc_name = line_name = div_name = comp_name = comp_id = ""
+        if eq.process_id:
+            from app.models import Process, ProductionLine, Division, Company
+            proc = await db.get(Process, eq.process_id)
+            if proc:
+                proc_name = proc.name
+                line = await db.get(ProductionLine, proc.line_id) if proc.line_id else None
+                if line:
+                    line_name = line.name
+                    div = await db.get(Division, line.division_id) if line.division_id else None
+                    if div:
+                        div_name = div.name
+                        comp = await db.get(Company, div.company_id) if div.company_id else None
+                        if comp:
+                            comp_name = comp.name
+                            comp_id = comp.id
+
+        if company_id and comp_id != company_id: continue
+
+        profile = qp.profile_data or {}
+        results.append({
+            "id": qp.id,
+            "qr_code": qp.qr_code,
+            "screen_name": qp.screen_name,
+            "description": qp.description,
+            "has_profile": bool(profile.get('rules')),
+            "rules_count": len(profile.get('rules', [])),
+            "equipment_name": eq.name,
+            "equipment_code": eq.code,
+            "equipment_type": eq.equipment_type,
+            "plc_type": eq.plc_type,
+            "process": proc_name,
+            "line": line_name,
+            "division": div_name,
+            "company": comp_name,
+        })
+    return results
+
+
 @router.get("/points/equipment/{equipment_id}")
 async def list_qr_points(equipment_id: str, db: AsyncSession = Depends(get_db)):
     stmt = select(QrPoint).where(

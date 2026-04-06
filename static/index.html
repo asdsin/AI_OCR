@@ -125,67 +125,53 @@ label:first-child{margin-top:0}
   <div class="tab" onclick="sw('result')">📊 결과</div>
 </div>
 
-<!-- ═══ 1. 위치 + QR 관리 (콤보박스 방식) ═══ -->
+<!-- ═══ 1. 기준정보 (가로 필터 + 테이블) ═══ -->
 <div id="p-setup" class="pnl active">
-  <div class="search-box">
-    <span class="icon">🔍</span>
-    <input id="searchInput" placeholder="업체, 설비, QR 빠른 검색..." oninput="onSearch(this.value)">
-  </div>
-  <div id="searchResults" style="display:none"></div>
-
-  <div id="comboSection">
-    <!-- 업체 -->
-    <div class="card" style="padding:8px 12px">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-        <label style="margin:0;min-width:50px">🏢 업체</label>
-        <select class="inp" id="selCompany" onchange="onCompanyChange()" style="flex:1;margin:0"></select>
-        <button class="btn-sm bg" onclick="openAdd('company')" style="white-space:nowrap">+</button>
-      </div>
-    </div>
-
-    <!-- 사업부 (선택) -->
-    <div class="card" style="padding:8px 12px" id="divRow">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-        <label style="margin:0;min-width:50px">🏭 사업부</label>
-        <select class="inp" id="selDivision" onchange="onDivisionChange()" style="flex:1;margin:0"></select>
-        <button class="btn-sm bg" onclick="openAdd('division')" style="white-space:nowrap">+</button>
-      </div>
-    </div>
-
-    <!-- 라인 -->
-    <div class="card" style="padding:8px 12px;display:none" id="lineRow">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-        <label style="margin:0;min-width:50px">🔧 라인</label>
-        <select class="inp" id="selLine" onchange="onLineChange()" style="flex:1;margin:0"></select>
-        <button class="btn-sm bg" onclick="openAdd('line')" style="white-space:nowrap">+</button>
-      </div>
-    </div>
-
-    <!-- 공정 -->
-    <div class="card" style="padding:8px 12px;display:none" id="procRow">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-        <label style="margin:0;min-width:50px">⚙️ 공정</label>
-        <select class="inp" id="selProcess" onchange="onProcessChange()" style="flex:1;margin:0"></select>
-        <button class="btn-sm bg" onclick="openAdd('process')" style="white-space:nowrap">+</button>
-      </div>
-    </div>
-
-    <!-- 설비 -->
-    <div class="card" style="padding:8px 12px;display:none" id="equipRow">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-        <label style="margin:0;min-width:50px">📟 설비</label>
-        <select class="inp" id="selEquipment" onchange="onEquipmentChange()" style="flex:1;margin:0"></select>
-        <button class="btn-sm bg" onclick="openAdd('equipment')" style="white-space:nowrap">+</button>
-      </div>
+  <!-- 가로형 필터 바 -->
+  <div class="card" style="padding:8px 10px">
+    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+      <select class="inp" id="selCompany" onchange="onCompanyChange()" style="flex:1;min-width:80px;margin:0;padding:6px;font-size:12px">
+        <option value="">업체 전체</option>
+      </select>
+      <select class="inp" id="selDivision" onchange="onFilterChange()" style="flex:1;min-width:70px;margin:0;padding:6px;font-size:12px">
+        <option value="">사업부</option>
+      </select>
+      <select class="inp" id="selLine" onchange="onFilterChange()" style="flex:1;min-width:60px;margin:0;padding:6px;font-size:12px">
+        <option value="">라인</option>
+      </select>
+      <input class="inp" id="filterSearch" placeholder="🔍 검색..." oninput="onFilterChange()" style="flex:1;min-width:80px;margin:0;padding:6px;font-size:12px">
+      <button class="btn-sm bg" onclick="openAdd('company')" title="업체 추가">+</button>
     </div>
   </div>
 
-  <!-- QR 포인트 관리 -->
-  <div id="qrSection" style="display:none">
-    <div class="card">
-      <div class="card-title">🏷️ QR 포인트 <button class="btn-sm bg" onclick="openQrAdd()">+ QR 추가</button></div>
-      <div id="qrList"></div>
-    </div>
+  <!-- 데이터 테이블 -->
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px" id="qrTable">
+      <thead>
+        <tr style="background:#1e293b;position:sticky;top:0">
+          <th style="padding:6px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">설비</th>
+          <th style="padding:6px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">QR / 화면</th>
+          <th style="padding:6px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">공정</th>
+          <th style="padding:6px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">라인</th>
+          <th style="padding:6px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">PLC</th>
+          <th style="padding:6px 8px;text-align:center;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">상태</th>
+          <th style="padding:6px 8px;text-align:center;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">작업</th>
+        </tr>
+      </thead>
+      <tbody id="qrTableBody">
+        <tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b">로딩 중...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 하단 추가 버튼 -->
+  <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">
+    <button class="btn-sm bg" onclick="openAdd('company')">+ 업체</button>
+    <button class="btn-sm bg" onclick="openAdd('division')">+ 사업부</button>
+    <button class="btn-sm bg" onclick="openAdd('line')">+ 라인</button>
+    <button class="btn-sm bg" onclick="openAdd('process')">+ 공정</button>
+    <button class="btn-sm bg" onclick="openAdd('equipment')">+ 설비</button>
+    <button class="btn-sm bp" onclick="openQrAdd()">+ QR</button>
   </div>
 </div>
 
@@ -410,7 +396,7 @@ function sw(t){
   });
   document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('active'));
   document.getElementById('p-'+t).classList.add('active');
-  if(t==='setup'){document.getElementById('qrSection').style.display=selEquipId?'block':'none'}
+  if(t==='setup')loadAllData();
 }
 
 async function checkSrv(){
@@ -437,218 +423,117 @@ async function api(p,o){
   }
 }
 
-// ═══ 검색 ═══
-let sTimer=null;
-function onSearch(q){clearTimeout(sTimer);const sr=document.getElementById('searchResults'),ts=document.getElementById('treeSection');
-  if(!q){sr.style.display='none';ts.style.display='block';return}
-  sTimer=setTimeout(()=>doSearch(q),300)}
-async function doSearch(q){
-  const sr=document.getElementById('searchResults'),ts=document.getElementById('treeSection');
-  sr.style.display='block';ts.style.display='none';
+// ═══ 가로형 필터 + 데이터 테이블 ═══
+let _allQrData=[];
+
+async function loadAllData(){
+  const compSel=document.getElementById('selCompany');
+  // 업체 콤보 로드
   try{
-    const res=await api(`/api/master/search?q=${encodeURIComponent(q)}`);
-    window._searchResults=res;
-    if(!res.length){sr.innerHTML='<div style="text-align:center;padding:20px;color:#64748b">결과 없음</div>';return}
-    const icons={company:'🏢',division:'🏭',line:'🔧',process:'⚙️',equipment:'📟',qr_point:'🏷️'};
-    const labels={company:'업체',division:'사업부',line:'라인',process:'공정',equipment:'설비',qr_point:'QR'};
-    sr.innerHTML=res.map((r,i)=>{
-      const hasProfile=r.qr_point?.has_profile;
-      const profileBadge=r.match_level==='qr_point'?(hasProfile?'<span style="color:#6ee7b7;font-size:10px"> ✅설정됨</span>':'<span style="color:#fca5a5;font-size:10px"> ⚠미설정</span>'):'';
-      return `<div class="sr-item" onclick="pickSR(${i})" style="cursor:pointer">
-        <div style="font-size:11px;color:#64748b">${r.breadcrumb}</div>
-        <div>${icons[r.match_level]||''} <b>${r.match_field}</b>${profileBadge}
-        <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#334155;color:#94a3b8;margin-left:4px">${labels[r.match_level]||r.match_level}${r.equipment?' · '+r.equipment.plc_type:''}</span></div>
-      </div>`;
-    }).join('');
-  }catch(e){sr.innerHTML=`<div style="color:#fca5a5;padding:12px">${e.message}</div>`}
-}
-function pickSR(i){
-  const r=window._searchResults[i];if(!r)return;
-  // 검색 결과에서 콤보박스 자동 설정은 향후 개선
-  document.getElementById('searchInput').value='';
-  document.getElementById('searchResults').style.display='none';
-  document.getElementById('treeSection').style.display='block';
-
-  if(r.match_level==='qr_point'&&r.qr_point&&r.equipment){
-    selEquipId=r.equipment.id;selEquipName=r.equipment.name;
-    if(r.qr_point.has_profile){
-      quickJudge(r.qr_point.qr_code,r.qr_point.screen_name);
-    } else {
-      selectQr(r.qr_point.id,r.qr_point.qr_code,r.qr_point.screen_name,false);
-    }
-    return;
-  }
-  if(r.match_level==='equipment'&&r.equipment){selectEquip(r.equipment.id,r.equipment.name);return}
-}
-
-function selectEquip(id,name){
-  selEquipId=id;selEquipName=name;
-  selQrId=null;selQrCode='';selQrName='';
-  document.getElementById('qrSection').style.display='block';
-  loadQrPoints();
-}
-
-// ═══ 콤보박스 드릴다운 ═══
-const COMBO={
-  company:{sel:'selCompany',api:'/api/master/companies',nextRow:'divRow',next:'division'},
-  division:{sel:'selDivision',api:'/api/master/divisions',param:'company_id',nextRow:'lineRow',next:'line'},
-  line:{sel:'selLine',api:'/api/master/lines',param:'division_id',nextRow:'procRow',next:'process'},
-  process:{sel:'selProcess',api:'/api/master/processes',param:'line_id',nextRow:'equipRow',next:'equipment'},
-  equipment:{sel:'selEquipment',api:'/api/master/equipments',param:'process_id'},
-};
-
-async function loadCombo(level, parentId){
-  const c=COMBO[level];if(!c)return;
-  const sel=document.getElementById(c.sel);
-  sel.innerHTML='<option value="">-- 선택 --</option>';
-  // 하위 콤보 초기화
-  const chain=['division','line','process','equipment'];
-  const startIdx=chain.indexOf(level);
-  if(startIdx>=0){
-    for(let i=startIdx+1;i<chain.length;i++){
-      const cc=COMBO[chain[i]];
-      document.getElementById(cc.sel).innerHTML='<option value="">-- 선택 --</option>';
-      if(COMBO[chain[i-1]]?.nextRow)document.getElementById(COMBO[chain[i]]?.sel)?.closest('.card')?.style&&(document.getElementById(COMBO[chain[i]].sel).closest('.card').style.display='none');
-    }
-  }
-  document.getElementById('qrSection').style.display='none';
-
-  let url=c.api;
-  if(c.param&&parentId)url+=`?${c.param}=${parentId}`;
-  try{
-    const items=await api(url);
-    items.forEach(it=>{
-      const opt=document.createElement('option');
-      opt.value=it.id;
-      opt.textContent=it.name||it.code;
-      sel.appendChild(opt);
-    });
-    // 건너뛰기: 항목이 0개면 자동 생성 옵션
-    if(items.length===0 && parentId && c.nextRow){
-      const opt=document.createElement('option');
-      opt.value='__skip__';
-      opt.textContent=`⏭ (기본) 자동 생성`;
-      sel.appendChild(opt);
-    }
-  }catch(e){console.error(e)}
+    const comps=await api('/api/master/companies');
+    compSel.innerHTML='<option value="">업체 전체</option>';
+    comps.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=c.name;compSel.appendChild(o)});
+  }catch(e){}
+  // 전체 QR 데이터 로드
+  await refreshTable();
 }
 
 async function onCompanyChange(){
-  const v=document.getElementById('selCompany').value;
-  if(!v){document.getElementById('divRow').querySelector('.card')&&(document.getElementById('divRow').style.display='block');return}
-  document.getElementById('divRow').style.display='block';
-  await loadCombo('division',v);
-}
-async function onDivisionChange(){
-  let v=document.getElementById('selDivision').value;
-  if(v==='__skip__'){v=await autoCreate('division');if(!v)return}
-  if(!v)return;
-  document.getElementById('lineRow').style.display='block';
-  await loadCombo('line',v);
-}
-async function onLineChange(){
-  let v=document.getElementById('selLine').value;
-  if(v==='__skip__'){v=await autoCreate('line');if(!v)return}
-  if(!v)return;
-  document.getElementById('procRow').style.display='block';
-  await loadCombo('process',v);
-}
-async function onProcessChange(){
-  let v=document.getElementById('selProcess').value;
-  if(v==='__skip__'){v=await autoCreate('process');if(!v)return}
-  if(!v)return;
-  document.getElementById('equipRow').style.display='block';
-  await loadCombo('equipment',v);
-}
-function onEquipmentChange(){
-  const sel=document.getElementById('selEquipment');
-  const v=sel.value;if(!v)return;
-  selEquipId=v;selEquipName=sel.options[sel.selectedIndex].textContent;
-  selQrId=null;selQrCode='';selQrName='';
-  document.getElementById('qrSection').style.display='block';
-  loadQrPoints();
+  const cid=document.getElementById('selCompany').value;
+  // 사업부/라인 필터 업데이트
+  const divSel=document.getElementById('selDivision');
+  const lineSel=document.getElementById('selLine');
+  divSel.innerHTML='<option value="">사업부</option>';
+  lineSel.innerHTML='<option value="">라인</option>';
+  if(cid){
+    try{
+      const divs=await api(`/api/master/divisions?company_id=${cid}`);
+      divs.forEach(d=>{const o=document.createElement('option');o.value=d.name;o.textContent=d.name;divSel.appendChild(o)});
+      const lines=await api(`/api/master/lines?division_id=${divs[0]?.id||''}`);
+      lines.forEach(l=>{const o=document.createElement('option');o.value=l.name;o.textContent=l.name;lineSel.appendChild(o)});
+    }catch(e){}
+  }
+  await refreshTable();
 }
 
-async function autoCreate(level){
-  const c=COMBO[level];
-  const parentSel=document.getElementById(COMBO[{division:'company',line:'division',process:'line'}[level]].sel);
-  const parentName=parentSel.options[parentSel.selectedIndex]?.textContent||'기본';
-  const body={code:`default-${Date.now().toString(36)}`,name:`${parentName} (기본)`};
-  if(c.param){
-    const parentVal={division:'selCompany',line:'selDivision',process:'selLine'}[level];
-    body[c.param]=document.getElementById(parentVal).value;
-  }
+async function refreshTable(){
+  const cid=document.getElementById('selCompany').value;
+  const tbody=document.getElementById('qrTableBody');
+  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b">로딩 중...</td></tr>';
   try{
-    const created=await api(c.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    // 콤보 리로드 후 선택
-    const sel=document.getElementById(c.sel);
-    const opt=document.createElement('option');opt.value=created.id;opt.textContent=body.name;
-    sel.insertBefore(opt,sel.lastChild);sel.value=created.id;
-    return created.id;
-  }catch(e){alert('생성 실패: '+e.message);return null}
+    const url=cid?`/api/qr/points/all?company_id=${cid}`:'/api/qr/points/all';
+    _allQrData=await api(url);
+    onFilterChange();
+  }catch(e){
+    tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:20px;color:#fca5a5">${e.message}</td></tr>`;
+  }
 }
+
+function onFilterChange(){
+  const divF=document.getElementById('selDivision').value.toLowerCase();
+  const lineF=document.getElementById('selLine').value.toLowerCase();
+  const search=document.getElementById('filterSearch').value.toLowerCase();
+
+  let filtered=_allQrData.filter(r=>{
+    if(divF && !r.division.toLowerCase().includes(divF)) return false;
+    if(lineF && !r.line.toLowerCase().includes(lineF)) return false;
+    if(search){
+      const hay=(r.equipment_name+r.qr_code+r.screen_name+r.process+r.plc_type+r.description).toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const tbody=document.getElementById('qrTableBody');
+  if(!filtered.length){
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b">데이터가 없습니다</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML=filtered.map(r=>{
+    const st=r.has_profile
+      ?`<span class="badge ok" style="font-size:10px">${r.rules_count}개</span>`
+      :'<span class="badge ng" style="font-size:10px">미설정</span>';
+    return `<tr style="border-bottom:1px solid #1e293b;cursor:pointer" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background=''">
+      <td style="padding:6px 8px;white-space:nowrap"><b>${r.equipment_name}</b><br><span style="color:#64748b;font-size:10px">${r.equipment_code}</span></td>
+      <td style="padding:6px 8px"><b style="color:#60a5fa">${r.qr_code}</b><br><span style="color:#94a3b8;font-size:10px">${r.screen_name}</span></td>
+      <td style="padding:6px 8px;color:#94a3b8">${r.process}</td>
+      <td style="padding:6px 8px;color:#94a3b8">${r.line}</td>
+      <td style="padding:6px 8px;color:#64748b;font-size:11px">${r.plc_type||'-'}</td>
+      <td style="padding:6px 8px;text-align:center">${st}</td>
+      <td style="padding:4px;text-align:center;white-space:nowrap">
+        <button class="btn-sm bp" onclick="selectQr('${r.id}','${r.qr_code}','${esc(r.screen_name)}',${r.has_profile});selEquipName='${esc(r.equipment_name)}'">기준</button>
+        ${r.has_profile?`<button class="btn-sm bg" onclick="quickJudge('${r.qr_code}','${esc(r.screen_name)}');selEquipName='${esc(r.equipment_name)}'">판정</button>`:''}
+        <button class="btn-sm bs" onclick="printQrLabel('${r.id}')">🖨️</button>
+        <button class="btn-sm bs" onclick="copyQrImg('${r.id}')">📋</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s){return (s||'').replace(/'/g,"\\'")}
 
 // 경로 헬퍼
 function _getPath(){
   const parts=[];
-  ['selCompany','selDivision','selLine','selProcess','selEquipment'].forEach(id=>{
-    const s=document.getElementById(id);
-    if(s&&s.value&&s.value!=='__skip__'){
-      const txt=s.options[s.selectedIndex]?.textContent;
-      if(txt&&!txt.startsWith('--'))parts.push(txt);
-    }
-  });
+  const sel=document.getElementById('selCompany');
+  if(sel&&sel.value){const t=sel.options[sel.selectedIndex]?.textContent;if(t)parts.push(t)}
+  if(selEquipName)parts.push(selEquipName);
+  if(selQrName)parts.push(selQrName);
   return parts.join(' > ');
 }
 
-// 초기 로드
-async function initCombos(){await loadCombo('company')}
-
-// QR 포인트 목록
-async function loadQrPoints(){
-  const el=document.getElementById('qrList');
-  try{
-    const qrs=await api(`/api/qr/points/equipment/${selEquipId}`);
-    if(!qrs.length){
-      el.innerHTML='<div style="color:#64748b;font-size:12px;padding:8px">QR 포인트가 없습니다. 추가하세요.</div>';
-      return;
-    }
-    el.innerHTML=qrs.map(q=>{
-      const pb=q.has_profile?`<span class="badge ok" style="font-size:10px">${q.rules_count}개</span>`:'<span class="badge ng" style="font-size:10px">미설정</span>';
-      return `<div class="tree-item" style="border-left:3px solid ${q.has_profile?'#22c55e':'#64748b'};flex-wrap:wrap">
-        <div class="tree-icon">🏷️</div>
-        <div class="tree-info"><div class="name">${q.screen_name}</div><div class="sub">QR: ${q.qr_code} ${pb}</div></div>
-        <div style="display:flex;gap:3px;flex-wrap:wrap">
-          <button class="btn-sm bp" onclick="selectQr('${q.id}','${q.qr_code}','${q.screen_name.replace(/'/g,"\\'")}',${q.has_profile})">기준</button>
-          ${q.has_profile?`<button class="btn-sm bg" onclick="quickJudge('${q.qr_code}','${q.screen_name.replace(/'/g,"\\'")}')">판정</button>`:''}
-          <button class="btn-sm bs" onclick="printQrLabel('${q.id}')">🖨️</button>
-          <button class="btn-sm bs" onclick="copyQrImage('${q.id}')" title="이미지 복사">📋</button>
-        </div>
-      </div>`;
-    }).join('');
-    el.innerHTML+=`<div style="display:flex;gap:6px;margin-top:8px">
-      <button class="btn bs" style="flex:1" onclick="printQrSheet()">🖨️ 전체 시트</button>
-      <button class="btn bs" style="flex:1" onclick="copyAllQrImages()">📋 전체 복사</button>
-    </div>`;
-  }catch(e){el.innerHTML=`<div style="color:#fca5a5">${e.message}</div>`}
-}
-
 // QR 이미지 복사
-async function copyQrImage(qrPointId){
+async function copyQrImg(qrPointId){
   try{
     const res=await fetch(API+`/api/qr/label/${qrPointId}?size=medium`);
     const blob=await res.blob();
     await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-    alert('QR 라벨 이미지가 클립보드에 복사되었습니다');
-  }catch(e){
-    // 클립보드 API 미지원 시 새 탭으로 열기
-    window.open(API+`/api/qr/label/${qrPointId}?size=large`,'_blank');
-  }
+    alert('클립보드에 복사됨');
+  }catch(e){window.open(API+`/api/qr/label/${qrPointId}?size=large`,'_blank')}
 }
-async function copyAllQrImages(){
-  if(!selEquipId)return;
-  window.open(API+`/api/qr/sheet/${selEquipId}?size=medium`,'_blank');
-}
+
+function selectEquip(id,name){selEquipId=id;selEquipName=name}
 
 function selectQr(id,code,name,hasProfile){
   selQrId=id;selQrCode=code;selQrName=name;
@@ -1568,32 +1453,33 @@ async function saveM1(){
     };
     if(!body.qr_code||!body.screen_name){alert('QR코드와 화면이름 필수');return}
     try{await api('/api/qr/points',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    closeM1();loadQrPoints();}catch(e){alert('저장 실패: '+e.message)}
+    closeM1();refreshTable();}catch(e){alert('저장 실패: '+e.message)}
     return;
   }
-  const C=COMBO[addLevel];if(!C){closeM1();return}
+  const apis={company:'/api/master/companies',division:'/api/master/divisions',line:'/api/master/lines',process:'/api/master/processes',equipment:'/api/master/equipments'};
+  const params={division:'company_id',line:'division_id',process:'line_id',equipment:'process_id'};
+  const apiUrl=apis[addLevel];if(!apiUrl){closeM1();return}
   const body={code:document.getElementById('a_code')?.value,name:document.getElementById('a_name')?.value};
   if(!body.code||!body.name){alert('코드/이름 필수');return}
-  // 부모 ID를 현재 콤보박스에서 가져오기
-  const parentMap={division:'selCompany',line:'selDivision',process:'selLine',equipment:'selProcess'};
-  if(C.param&&parentMap[addLevel]){
-    body[C.param]=document.getElementById(parentMap[addLevel])?.value;
+  // 부모 ID — 필터에서 가져오거나 프롬프트
+  if(params[addLevel]){
+    const parentSel=document.getElementById('selCompany');
+    const parentId=parentSel?.value;
+    if(addLevel==='division'&&parentId)body.company_id=parentId;
+    else{
+      const pid=prompt(`상위 항목 ID를 입력하세요 (${params[addLevel]})`);
+      if(pid)body[params[addLevel]]=pid;
+    }
   }
   ['industry','location','line_type','process_type','equipment_type','plc_type'].forEach(f=>{
     const el=document.getElementById('a_'+f);if(el)body[f]=el.value;
   });
-  await api(C.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  await api(apiUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   closeM1();
-  // 해당 레벨 콤보 리로드
-  if(parentMap[addLevel]){
-    const parentVal=document.getElementById(parentMap[addLevel])?.value;
-    await loadCombo(addLevel,parentVal);
-  } else {
-    await initCombos();
-  }
+  await loadAllData();
 }
 
-initCombos();
+loadAllData();
 </script>
 </body>
 </html>

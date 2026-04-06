@@ -619,7 +619,35 @@ async function judgeByQr(){
 
 // ═══ 공통 카메라 유틸 ═══
 let _activeStream=null;
+
+function _checkCameraSupport(){
+  // HTTPS 체크 (localhost는 예외)
+  const isSecure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
+  if(!isSecure){
+    const httpsUrl = location.href.replace('http://','https://').replace(':8001',':8443');
+    return {ok:false, reason:'http',
+      msg:`카메라는 HTTPS에서만 사용 가능합니다.\n\nHTTPS로 접속하세요:\n${httpsUrl}\n\n(자체 서명 인증서 경고는 "고급 → 계속 진행"으로 무시)`};
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return {ok:false, reason:'unsupported', msg:'이 브라우저에서 카메라를 지원하지 않습니다.'};
+  }
+  return {ok:true};
+}
+
 async function _openCam(videoEl){
+  // 카메라 지원 체크
+  const check = _checkCameraSupport();
+  if(!check.ok){
+    if(check.reason==='http'){
+      // HTTPS 전환 안내
+      if(confirm(check.msg+'\n\nHTTPS로 이동하시겠습니까?')){
+        location.href = location.href.replace('http://','https://').replace(':8001',':8443');
+      }
+    } else {
+      alert(check.msg);
+    }
+    return false;
+  }
   try{
     _activeStream=await navigator.mediaDevices.getUserMedia({
       video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}
@@ -627,7 +655,16 @@ async function _openCam(videoEl){
     videoEl.srcObject=_activeStream;
     await videoEl.play();
     return true;
-  }catch(e){alert('카메라 접근 실패: '+e.message);return false}
+  }catch(e){
+    if(e.name==='NotAllowedError'){
+      alert('카메라 권한이 거부되었습니다.\n\n브라우저 설정에서 이 사이트의 카메라 권한을 허용해주세요.\n(주소창 왼쪽 자물쇠/설정 아이콘)');
+    } else if(e.name==='NotFoundError'){
+      alert('카메라를 찾을 수 없습니다.\n카메라가 있는 기기에서 접속하세요.');
+    } else {
+      alert('카메라 접근 실패: '+e.message+'\n\n파일 업로드로 대신 사용하세요.');
+    }
+    return false;
+  }
 }
 function _closeCam(){
   if(_activeStream){_activeStream.getTracks().forEach(t=>t.stop());_activeStream=null}

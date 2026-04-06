@@ -10,4 +10,5 @@ data/
 *.heic
 plc_samples/
 judgment_result.json
+certs/
 .claude/

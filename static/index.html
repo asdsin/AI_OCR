@@ -427,6 +427,17 @@ async function renderTree(){
       </div>`;
     }
     h+=`<div class="tree-item tree-add" onclick="openAdd('${L.key}')">+ ${L.label} 추가</div>`;
+
+    // 사업부/라인/공정이 비어있으면 건너뛰기 옵션 표시
+    if(items.length===0 && lv>=1 && lv<=3){
+      const skipTarget=LEVELS[lv+1];
+      if(skipTarget){
+        h+=`<div class="tree-item" onclick="skipLevel('${L.key}')" style="border:1px dashed #3b82f6;justify-content:center;color:#60a5fa;font-size:12px">
+          ⏭ ${L.label} 없이 ${skipTarget.label} 바로 추가
+        </div>`;
+      }
+    }
+
     tv.innerHTML=h;
   }catch(e){
     tv.innerHTML=`<div style="padding:16px">
@@ -436,6 +447,24 @@ async function renderTree(){
       <button class="btn bp" style="margin-top:8px" onclick="renderTree()">재시도</button>
     </div>`;
   }
+}
+
+async function skipLevel(levelKey){
+  // 현재 레벨을 "기본" 이름으로 자동 생성하고 건너뛰기
+  const L=LEVELS.find(l=>l.key===levelKey);
+  const parentId=navStack.length>0?navStack[navStack.length-1].id:null;
+  const parentName=navStack.length>0?navStack[navStack.length-1].name:'';
+  const defaultName=parentName?`${parentName} (기본)`:'기본';
+  const defaultCode=`default-${Date.now().toString(36)}`;
+
+  const body={code:defaultCode, name:defaultName};
+  if(L.parentParam&&parentId) body[L.parentParam]=parentId;
+
+  try{
+    const created=await api(L.api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    // 생성된 항목으로 진입
+    drillDown(created.id, defaultName);
+  }catch(e){alert('자동 생성 실패: '+e.message)}
 }
 function drillDown(id,name){navStack.push({level:LEVELS[curLevel()].key,id,name});renderTree()}
 function navTo(i){navStack=navStack.slice(0,i);renderTree()}

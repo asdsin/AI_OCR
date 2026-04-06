@@ -522,13 +522,13 @@ function printQrLabel(qrPointId){
       <button class="size-btn" onclick="setSize('large',this)">대</button>
     </div>
     <img id="labelImg" src="${url}">
-    <script>
+    <scr`+`ipt>
     function setSize(s,btn){
       document.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById('labelImg').src='${API}/api/qr/label/${qrPointId}?size='+s;
     }
-    </script>
+    </scr`+`ipt>
   </body></html>`);
 }
 

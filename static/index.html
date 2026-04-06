@@ -79,8 +79,9 @@ label:first-child{margin-top:0}
 
 .camera-area{width:100%;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden;margin-bottom:10px;position:relative}
 .camera-area video,.camera-area img{width:100%;height:100%;object-fit:contain}
-.upload-area{border:2px dashed #475569;border-radius:10px;padding:20px;text-align:center;cursor:pointer;margin-bottom:10px}
+.upload-area{border:2px dashed #475569;border-radius:10px;padding:20px;text-align:center;cursor:pointer;margin-bottom:10px;transition:all 0.2s}
 .upload-area input{display:none}
+.upload-area.dragover{border-color:#3b82f6;background:rgba(59,130,246,0.1);transform:scale(1.02)}
 
 .loading{text-align:center;padding:30px}
 .spinner{display:inline-block;width:28px;height:28px;border:3px solid #334155;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite}
@@ -217,9 +218,9 @@ label:first-child{margin-top:0}
     <!-- 시작 버튼 -->
     <div id="refStartBtns">
       <button class="btn bp" onclick="startRefCam()">📷 카메라로 촬영</button>
-      <div class="upload-area" onclick="document.getElementById('refFile').click()" style="margin-top:4px">
+      <div class="upload-area" id="refDropZone" onclick="document.getElementById('refFile').click()" style="margin-top:4px">
         <input type="file" id="refFile" accept="image/*" capture="environment" onchange="handleRefFile(event)">
-        <span style="font-size:12px;color:#64748b">📁 파일로 업로드</span>
+        <span style="font-size:12px;color:#64748b">📁 파일 선택 또는 여기에 드래그</span>
       </div>
     </div>
 
@@ -355,9 +356,9 @@ label:first-child{margin-top:0}
   </div>
 
   <!-- 파일 업로드 폴백 -->
-  <div class="upload-area" onclick="document.getElementById('judgeFile').click()" id="judgeUpload" style="margin-top:4px">
+  <div class="upload-area" id="judgeDropZone" onclick="document.getElementById('judgeFile').click()" style="margin-top:4px">
     <input type="file" id="judgeFile" accept="image/*" capture="environment" onchange="handleJudgeFile(event)">
-    <span style="font-size:12px;color:#64748b">📁 파일로 판정</span>
+    <span style="font-size:12px;color:#64748b">📁 파일 선택 또는 여기에 드래그</span>
   </div>
 
   <div id="judging" class="loading" style="display:none">
@@ -412,6 +413,26 @@ async function checkSrv(){
     console.error('Server check failed:',API,e);
   }
 }
+// ═══ 드래그앤드롭 ═══
+function setupDropZone(zoneId, handler){
+  const zone=document.getElementById(zoneId);
+  if(!zone)return;
+  ['dragenter','dragover'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();zone.classList.add('dragover')}));
+  ['dragleave','drop'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();zone.classList.remove('dragover')}));
+  zone.addEventListener('drop',e=>{
+    const file=e.dataTransfer?.files?.[0];
+    if(file&&file.type.startsWith('image/'))handler(file);
+  });
+  // 페이지 전체 드래그 시 기본동작 방지
+  document.addEventListener('dragover',e=>e.preventDefault());
+  document.addEventListener('drop',e=>e.preventDefault());
+}
+// 초기화 시 드롭존 등록
+setTimeout(()=>{
+  setupDropZone('refDropZone',file=>{_refBlob=file;document.getElementById('refPrevImg').src=URL.createObjectURL(file);document.getElementById('refStartBtns').style.display='none';document.getElementById('refPrev').style.display='block'});
+  setupDropZone('judgeDropZone',file=>{_judgeBlob=file;document.getElementById('judgePrevImg').src=URL.createObjectURL(file);document.getElementById('judgePrev').style.display='block';document.getElementById('judgeModeBar').style.display='none'});
+},100);
+
 async function api(p,o){
   try{
     const r=await fetch(API+p,o);

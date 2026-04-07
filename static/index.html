@@ -838,7 +838,7 @@ function initZoneEditor(){
     // 다른 영역 위 클릭 → 선택
     for(let i=_zones.length-1;i>=0;i--){
       const z=_zones[i];
-      if(px>=z.x-E&&px<=z.x+z.w+E&&py>=z.y-E&&py<=z.y+z.h+E){
+      if(px>=z.x&&px<=z.x+z.w&&py>=z.y&&py<=z.y+z.h){
         selectZone(i);return;
       }
     }

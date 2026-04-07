@@ -794,55 +794,108 @@ function initZoneEditor(){
 
   const wrap=document.getElementById('zoneWrap');
   const overlay=document.getElementById('zoneOverlay');
+  let _action=null; // 'draw','move','resize'
+  let _startPt={}, _startZone={};
 
-  // 올가미 드래그: 빈 공간에서 시작 → 새 영역 생성
-  overlay.onpointerdown=function(e){
-    if(_zones.length>=MAX_ZONES){alert(`최대 ${MAX_ZONES}개까지 가능합니다`);return}
+  wrap.onpointerdown=function(e){
     const rect=wrap.getBoundingClientRect();
-    _drawStart={x:(e.clientX-rect.left)/rect.width*100, y:(e.clientY-rect.top)/rect.height*100};
-    _drawing=true;
-    // 임시 드래그 박스
+    const px=(e.clientX-rect.left)/rect.width*100;
+    const py=(e.clientY-rect.top)/rect.height*100;
+    e.preventDefault();
+
+    // 선택된 영역의 모서리(우하단 20% 영역) → 리사이즈
+    if(_activeZoneIdx>=0){
+      const z=_zones[_activeZoneIdx];
+      const cornerX=z.x+z.w, cornerY=z.y+z.h;
+      if(Math.abs(px-cornerX)<3&&Math.abs(py-cornerY)<3){
+        _action='resize';
+        _startPt={px,py};_startZone={...z};
+        return;
+      }
+      // 선택된 영역 내부 → 이동
+      if(px>=z.x&&px<=z.x+z.w&&py>=z.y&&py<=z.y+z.h){
+        _action='move';
+        _startPt={px,py};_startZone={...z};
+        return;
+      }
+    }
+
+    // 기존 영역 위 클릭 → 선택
+    for(let i=_zones.length-1;i>=0;i--){
+      const z=_zones[i];
+      if(px>=z.x&&px<=z.x+z.w&&py>=z.y&&py<=z.y+z.h){
+        selectZone(i);return;
+      }
+    }
+
+    // 빈 곳 → 새 영역 그리기
+    if(_zones.length>=MAX_ZONES){return}
+    _action='draw';
+    _drawStart={x:px,y:py};
     const tmp=document.createElement('div');
     tmp.className='zone-drawing';tmp.id='zone-tmp';
-    tmp.style.left=_drawStart.x+'%';tmp.style.top=_drawStart.y+'%';
+    tmp.style.left=px+'%';tmp.style.top=py+'%';
     tmp.style.width='0%';tmp.style.height='0%';
     overlay.appendChild(tmp);
-    e.preventDefault();
   };
-  overlay.onpointermove=function(e){
-    if(!_drawing)return;
+
+  wrap.onpointermove=function(e){
+    if(!_action)return;
     const rect=wrap.getBoundingClientRect();
-    const cx=(e.clientX-rect.left)/rect.width*100;
-    const cy=(e.clientY-rect.top)/rect.height*100;
-    const tmp=document.getElementById('zone-tmp');
-    if(!tmp)return;
-    const x=Math.min(_drawStart.x,cx), y=Math.min(_drawStart.y,cy);
-    const w=Math.abs(cx-_drawStart.x), h=Math.abs(cy-_drawStart.y);
-    tmp.style.left=x+'%';tmp.style.top=y+'%';
-    tmp.style.width=w+'%';tmp.style.height=h+'%';
+    const px=(e.clientX-rect.left)/rect.width*100;
+    const py=(e.clientY-rect.top)/rect.height*100;
+
+    if(_action==='draw'){
+      const tmp=document.getElementById('zone-tmp');if(!tmp)return;
+      const x=Math.min(_drawStart.x,px),y=Math.min(_drawStart.y,py);
+      const w=Math.abs(px-_drawStart.x),h=Math.abs(py-_drawStart.y);
+      tmp.style.left=x+'%';tmp.style.top=y+'%';tmp.style.width=w+'%';tmp.style.height=h+'%';
+    }
+    else if(_action==='move'&&_activeZoneIdx>=0){
+      const z=_zones[_activeZoneIdx];
+      z.x=Math.max(0,Math.min(100-z.w,_startZone.x+(px-_startPt.px)));
+      z.y=Math.max(0,Math.min(100-z.h,_startZone.y+(py-_startPt.py)));
+      renderZones();
+    }
+    else if(_action==='resize'&&_activeZoneIdx>=0){
+      const z=_zones[_activeZoneIdx];
+      z.w=Math.max(3,Math.min(100-z.x,_startZone.w+(px-_startPt.px)));
+      z.h=Math.max(3,Math.min(100-z.y,_startZone.h+(py-_startPt.py)));
+      renderZones();
+    }
   };
-  overlay.onpointerup=function(e){
-    if(!_drawing)return;
-    _drawing=false;
-    const tmp=document.getElementById('zone-tmp');
-    if(!tmp)return;
-    const rect=wrap.getBoundingClientRect();
-    const cx=(e.clientX-rect.left)/rect.width*100;
-    const cy=(e.clientY-rect.top)/rect.height*100;
-    const x=Math.min(_drawStart.x,cx), y=Math.min(_drawStart.y,cy);
-    const w=Math.abs(cx-_drawStart.x), h=Math.abs(cy-_drawStart.y);
-    tmp.remove();
-    // 너무 작은 영역 무시
-    if(w<2||h<2)return;
-    // 영역 추가
-    const idx=_zones.length;
-    _zones.push({
-      id:'z'+Date.now(),
-      x:Math.round(x*10)/10, y:Math.round(y*10)/10,
-      w:Math.round(w*10)/10, h:Math.round(h*10)/10,
-      name:`영역 ${idx+1}`, ocrResult:null
-    });
-    renderZones();
+
+  wrap.onpointerup=function(e){
+    if(_action==='draw'){
+      const tmp=document.getElementById('zone-tmp');
+      if(tmp){
+        const rect=wrap.getBoundingClientRect();
+        const px=(e.clientX-rect.left)/rect.width*100;
+        const py=(e.clientY-rect.top)/rect.height*100;
+        const x=Math.min(_drawStart.x,px),y=Math.min(_drawStart.y,py);
+        const w=Math.abs(px-_drawStart.x),h=Math.abs(py-_drawStart.y);
+        tmp.remove();
+        if(w>=2&&h>=2){
+          _zones.push({id:'z'+Date.now(),
+            x:Math.round(x*10)/10,y:Math.round(y*10)/10,
+            w:Math.round(w*10)/10,h:Math.round(h*10)/10,
+            name:`영역 ${_zones.length+1}`,ocrResult:null});
+          _activeZoneIdx=_zones.length-1;
+          renderZones();
+        }
+      }
+    }
+    else if(_action==='move'||_action==='resize'){
+      // 이동/리사이즈 완료 → 소수점 정리
+      if(_activeZoneIdx>=0){
+        const z=_zones[_activeZoneIdx];
+        z.x=Math.round(z.x*10)/10;z.y=Math.round(z.y*10)/10;
+        z.w=Math.round(z.w*10)/10;z.h=Math.round(z.h*10)/10;
+        z.ocrResult=null; // 위치 변경 시 OCR 결과 초기화
+        renderZones();
+      }
+    }
+    _action=null;
   };
 }
 
@@ -853,16 +906,22 @@ function renderZones(){
   document.getElementById('btnConfirmZones').disabled=_zones.length===0;
 
   // 오버레이: 선택된 영역만 실선+밝게, 나머지는 점선+반투명
-  overlay.querySelectorAll('.zone-box').forEach(el=>el.remove());
+  overlay.querySelectorAll('.zone-box,.zone-handle').forEach(el=>el.remove());
   _zones.forEach((z,i)=>{
     const c=ZONE_COLORS[i%ZONE_COLORS.length];
     const active=i===_activeZoneIdx;
     const div=document.createElement('div');
     div.className='zone-box'+(active?' active':'');
-    div.style.cssText=`left:${z.x}%;top:${z.y}%;width:${z.w}%;height:${z.h}%;border-color:${c};background:${c}${active?'33':'11'};border-style:${active?'solid':'dashed'};opacity:${active?'1':'0.6'};z-index:${active?'3':'1'}`;
+    div.style.cssText=`left:${z.x}%;top:${z.y}%;width:${z.w}%;height:${z.h}%;border-color:${c};background:${c}${active?'33':'11'};border-style:${active?'solid':'dashed'};opacity:${active?'1':'0.5'};z-index:${active?'3':'1'};cursor:${active?'move':'pointer'}`;
     div.textContent=i+1;
-    div.onclick=function(e){e.stopPropagation();selectZone(i)};
     overlay.appendChild(div);
+    // 선택된 영역에 리사이즈 핸들 (우하단 꼭짓점)
+    if(active){
+      const handle=document.createElement('div');
+      handle.className='zone-handle';
+      handle.style.cssText=`position:absolute;left:${z.x+z.w}%;top:${z.y+z.h}%;width:14px;height:14px;background:${c};border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);cursor:nwse-resize;z-index:4`;
+      overlay.appendChild(handle);
+    }
   });
 
   // 컴팩트 영역 리스트 (한 줄씩)
@@ -917,9 +976,15 @@ function renderZoneDetail(){
       <span style="background:${c};color:#fff;padding:1px 8px;border-radius:4px;font-size:12px;font-weight:700">${i+1}</span>
       <input class="inp" value="${z.name}" onchange="_zones[${i}].name=this.value" style="flex:1;margin:0;padding:4px 6px;font-size:13px">
     </div>
-    <div style="font-size:10px;color:#64748b;margin-bottom:6px">X:${z.x.toFixed(1)}% Y:${z.y.toFixed(1)}% W:${z.w.toFixed(1)}% H:${z.h.toFixed(1)}%</div>
+    <div style="display:flex;gap:3px;align-items:center;margin-bottom:6px;font-size:11px">
+      <span style="color:#64748b">X</span><input class="inp" type="number" value="${z.x.toFixed(1)}" onchange="_zones[${i}].x=+this.value;_zones[${i}].ocrResult=null;renderZones()" style="width:48px;padding:3px;margin:0;font-size:11px">
+      <span style="color:#64748b">Y</span><input class="inp" type="number" value="${z.y.toFixed(1)}" onchange="_zones[${i}].y=+this.value;_zones[${i}].ocrResult=null;renderZones()" style="width:48px;padding:3px;margin:0;font-size:11px">
+      <span style="color:#64748b">W</span><input class="inp" type="number" value="${z.w.toFixed(1)}" onchange="_zones[${i}].w=+this.value;_zones[${i}].ocrResult=null;renderZones()" style="width:48px;padding:3px;margin:0;font-size:11px">
+      <span style="color:#64748b">H</span><input class="inp" type="number" value="${z.h.toFixed(1)}" onchange="_zones[${i}].h=+this.value;_zones[${i}].ocrResult=null;renderZones()" style="width:48px;padding:3px;margin:0;font-size:11px">
+      <span style="color:#475569">%</span>
+    </div>
     <div style="display:flex;gap:4px;margin-bottom:6px">
-      <button class="btn-sm bp" onclick="testSingleZone(${i})">🔍 OCR 테스트</button>
+      <button class="btn-sm bp" onclick="testSingleZone(${i})">🔍 테스트</button>
       <button class="btn-sm bd" onclick="deleteZone(${i})">🗑 삭제</button>
     </div>
     <div style="max-height:120px;overflow-y:auto">${ocrHtml}</div>`;

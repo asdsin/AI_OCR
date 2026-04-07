@@ -1047,7 +1047,7 @@ async function testSingleZone(i){
     const res=await fetch(API+'/api/ocr/test-zone',{method:'POST',body:form});
     if(!res.ok)throw new Error(`${res.status}`);
     const data=await res.json();
-    _zones[i].ocrResult=data.detected_items;
+    _zones[i].ocrResult=data.detected_items;_zones[i].cropImage=data.crop_image;
     renderZones();
   }catch(e){alert('테스트 실패: '+e.message)}
   finally{document.getElementById('zoneTestLoading').style.display='none'}
@@ -1085,7 +1085,7 @@ function confirmZonesAndProceed(){
   if(allItems.length){
     analyzeData.detected_items=allItems;
     analyzeData.total_detected=allItems.length;
-    analyzeData._zones=_zones.map(z=>({x:z.x,y:z.y,w:z.w,h:z.h,name:z.name}));
+    analyzeData._zones=_zones.map(z=>({x:z.x,y:z.y,w:z.w,h:z.h,name:z.name,cropImage:z.cropImage}));
   }
   selectedItems=new Set();
   renderAnalyze();setStep(3);
@@ -1103,39 +1103,83 @@ function renderAnalyze(){
     zoneGroups[zIdx].items.push({...it,_idx:i});
   });
 
+  // 선택된 항목이 있는 영역 vs 없는 영역
+  const zones=analyzeData._zones||[];
+
   let html='';
   Object.entries(zoneGroups).forEach(([zIdx,group])=>{
-    const c=ZONE_COLORS[parseInt(zIdx)%ZONE_COLORS.length]||'#3b82f6';
-    html+=`<div class="card" style="padding:8px;border-left:3px solid ${c}">
-      <div style="font-size:12px;font-weight:700;color:${c};margin-bottom:6px">${group.name}</div>`;
+    const zi=parseInt(zIdx);
+    const c=ZONE_COLORS[zi%ZONE_COLORS.length]||'#3b82f6';
+    const zone=zones[zi];
+    const cropImg=zone?.cropImage;
+    const hasSelected=group.items.some(it=>selectedItems.has(it._idx));
+    const numericItems=group.items.filter(it=>!it.is_noise);
 
-    group.items.forEach(it=>{
-      if(it.is_noise)return;
+    html+=`<div class="card" style="padding:0;border-left:3px solid ${c};overflow:hidden;margin-bottom:6px">`;
+
+    // 영역 헤더 (클릭으로 접기/펼치기)
+    html+=`<div style="display:flex;align-items:center;gap:6px;padding:8px;cursor:pointer;background:#1e293b" onclick="toggleZoneExpand(${zi})">
+      <span style="background:${c};color:#fff;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700">${zi+1}</span>
+      <span style="font-weight:700;font-size:13px;flex:1">${group.name}</span>
+      <span style="font-size:10px;color:#94a3b8">${numericItems.length}개</span>
+      <span style="font-size:12px;color:#64748b" id="expandIcon-${zi}">▼</span>
+    </div>`;
+
+    // 크롭 이미지 (있으면)
+    if(cropImg){
+      html+=`<div style="padding:4px" id="zoneBody-${zi}">
+        <img src="data:image/jpeg;base64,${cropImg}" style="width:100%;border-radius:4px;margin-bottom:4px">`;
+    } else {
+      html+=`<div style="padding:4px" id="zoneBody-${zi}">`;
+    }
+
+    // 항목 리스트
+    numericItems.forEach(it=>{
       const i=it._idx;
       const sel=selectedItems.has(i);
       const val=it._corrected_value!=null?it._corrected_value:(it.is_numeric?it.value:null);
       const edited=it._corrected_value!=null;
+      const valDisplay=val!=null?(val.toFixed?val.toFixed(1):val):'—';
 
-      html+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b" id="item-${i}">
-        <input type="checkbox" ${sel?'checked':''} onchange="toggleItem(${i})" style="width:18px;height:18px;accent-color:#22c55e">
-        <span style="font-size:14px;font-weight:700;min-width:50px;color:${it.is_numeric?'#6ee7b7':'#94a3b8'}">${val!=null?val.toFixed?val.toFixed(1):val:'—'}</span>
-        <span style="flex:1;font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis">${it.text}</span>
-        <span style="font-size:10px;color:#475569">${(it.confidence*100).toFixed(0)}%</span>
-        <input type="number" step="0.1" value="${val??''}" placeholder="실제값"
+      html+=`<div style="display:flex;align-items:center;gap:4px;padding:4px 2px;border-bottom:1px solid #0f172a;font-size:12px">
+        <input type="checkbox" ${sel?'checked':''} onchange="toggleItem(${i})" style="width:16px;height:16px;accent-color:#22c55e;flex-shrink:0">
+        <span style="font-weight:700;min-width:40px;color:${it.is_numeric?'#6ee7b7':'#94a3b8'}">${valDisplay}</span>
+        <span style="flex:1;color:#64748b;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.text}</span>
+        <span style="font-size:9px;color:#475569;min-width:24px">${(it.confidence*100).toFixed(0)}%</span>
+        <input type="number" step="0.1" value="${val??''}" placeholder="실제"
           onchange="correctValue(${i},this.value)"
-          style="width:60px;padding:3px;background:#0f172a;border:1px solid ${edited?'#f59e0b':'#334155'};border-radius:4px;color:#e2e8f0;font-size:12px;text-align:center">
-        <button onclick="markAsNoise(${i})" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:12px" title="노이즈 제거">🚫</button>
+          style="width:55px;padding:2px;background:#0f172a;border:1px solid ${edited?'#f59e0b':'#334155'};border-radius:3px;color:#e2e8f0;font-size:11px;text-align:center;flex-shrink:0">
+        <button onclick="markAsNoise(${i})" style="background:none;border:none;color:#475569;cursor:pointer;font-size:11px;padding:0 2px" title="노이즈">✕</button>
       </div>`;
     });
 
-    html+=`</div>`;
+    html+=`</div></div>`;
+  });
+
+  // 미테스트 영역 표시
+  zones.forEach((z,i)=>{
+    if(zoneGroups[i])return; // 이미 위에서 처리됨
+    const c=ZONE_COLORS[i%ZONE_COLORS.length];
+    html+=`<div class="card" style="padding:8px;border-left:3px solid ${c};opacity:0.6">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="background:${c};color:#fff;padding:1px 6px;border-radius:4px;font-size:11px">${i+1}</span>
+        <span style="font-size:12px;color:#64748b">${z.name} — OCR 미실행</span>
+        <button class="btn-sm bs" onclick="goStep2()" style="font-size:10px">← 영역으로</button>
+      </div>
+    </div>`;
   });
 
   if(!html)html='<div style="text-align:center;color:#64748b;padding:16px">영역 OCR 테스트를 먼저 실행하세요</div>';
   el.innerHTML=html;
-
-  // 선택 상태 업데이트
   document.getElementById('btnStep3').disabled=selectedItems.size===0;
+}
+
+function toggleZoneExpand(zi){
+  const body=document.getElementById('zoneBody-'+zi);
+  const icon=document.getElementById('expandIcon-'+zi);
+  if(!body)return;
+  if(body.style.display==='none'){body.style.display='block';icon.textContent='▼'}
+  else{body.style.display='none';icon.textContent='▶'}
 }
 
 function correctValue(i,val){

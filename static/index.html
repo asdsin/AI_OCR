@@ -794,8 +794,25 @@ function initZoneEditor(){
 
   const wrap=document.getElementById('zoneWrap');
   const overlay=document.getElementById('zoneOverlay');
-  let _action=null; // 'draw','move','resize'
+  let _action=null; // 'draw','move','edge-t','edge-b','edge-l','edge-r','corner-tl','corner-tr','corner-bl','corner-br'
   let _startPt={}, _startZone={};
+  const E=2.5; // 테두리 감지 두께 (%)
+
+  function _detectEdge(px,py,z){
+    // 영역 밖이면 null
+    if(px<z.x-E||px>z.x+z.w+E||py<z.y-E||py>z.y+z.h+E)return null;
+    const nearL=Math.abs(px-z.x)<E, nearR=Math.abs(px-(z.x+z.w))<E;
+    const nearT=Math.abs(py-z.y)<E, nearB=Math.abs(py-(z.y+z.h))<E;
+    // 모서리 (우선)
+    if(nearT&&nearL)return 'corner-tl'; if(nearT&&nearR)return 'corner-tr';
+    if(nearB&&nearL)return 'corner-bl'; if(nearB&&nearR)return 'corner-br';
+    // 테두리
+    if(nearT)return 'edge-t'; if(nearB)return 'edge-b';
+    if(nearL)return 'edge-l'; if(nearR)return 'edge-r';
+    // 내부
+    if(px>=z.x&&px<=z.x+z.w&&py>=z.y&&py<=z.y+z.h)return 'move';
+    return null;
+  }
 
   wrap.onpointerdown=function(e){
     const rect=wrap.getBoundingClientRect();
@@ -803,33 +820,27 @@ function initZoneEditor(){
     const py=(e.clientY-rect.top)/rect.height*100;
     e.preventDefault();
 
-    // 선택된 영역의 모서리(우하단 20% 영역) → 리사이즈
+    // 선택된 영역에서 테두리/모서리/내부 감지
     if(_activeZoneIdx>=0){
       const z=_zones[_activeZoneIdx];
-      const cornerX=z.x+z.w, cornerY=z.y+z.h;
-      if(Math.abs(px-cornerX)<3&&Math.abs(py-cornerY)<3){
-        _action='resize';
-        _startPt={px,py};_startZone={...z};
-        return;
-      }
-      // 선택된 영역 내부 → 이동
-      if(px>=z.x&&px<=z.x+z.w&&py>=z.y&&py<=z.y+z.h){
-        _action='move';
+      const edge=_detectEdge(px,py,z);
+      if(edge){
+        _action=edge;
         _startPt={px,py};_startZone={...z};
         return;
       }
     }
 
-    // 기존 영역 위 클릭 → 선택
+    // 다른 영역 위 클릭 → 선택
     for(let i=_zones.length-1;i>=0;i--){
       const z=_zones[i];
-      if(px>=z.x&&px<=z.x+z.w&&py>=z.y&&py<=z.y+z.h){
+      if(px>=z.x-E&&px<=z.x+z.w+E&&py>=z.y-E&&py<=z.y+z.h+E){
         selectZone(i);return;
       }
     }
 
     // 빈 곳 → 새 영역 그리기
-    if(_zones.length>=MAX_ZONES){return}
+    if(_zones.length>=MAX_ZONES)return;
     _action='draw';
     _drawStart={x:px,y:py};
     const tmp=document.createElement('div');
@@ -844,23 +855,41 @@ function initZoneEditor(){
     const rect=wrap.getBoundingClientRect();
     const px=(e.clientX-rect.left)/rect.width*100;
     const py=(e.clientY-rect.top)/rect.height*100;
+    const dx=px-_startPt.px, dy=py-_startPt.py;
 
     if(_action==='draw'){
       const tmp=document.getElementById('zone-tmp');if(!tmp)return;
       const x=Math.min(_drawStart.x,px),y=Math.min(_drawStart.y,py);
-      const w=Math.abs(px-_drawStart.x),h=Math.abs(py-_drawStart.y);
-      tmp.style.left=x+'%';tmp.style.top=y+'%';tmp.style.width=w+'%';tmp.style.height=h+'%';
+      tmp.style.left=x+'%';tmp.style.top=y+'%';
+      tmp.style.width=Math.abs(px-_drawStart.x)+'%';tmp.style.height=Math.abs(py-_drawStart.y)+'%';
     }
-    else if(_action==='move'&&_activeZoneIdx>=0){
+    else if(_activeZoneIdx>=0){
       const z=_zones[_activeZoneIdx];
-      z.x=Math.max(0,Math.min(100-z.w,_startZone.x+(px-_startPt.px)));
-      z.y=Math.max(0,Math.min(100-z.h,_startZone.y+(py-_startPt.py)));
-      renderZones();
-    }
-    else if(_action==='resize'&&_activeZoneIdx>=0){
-      const z=_zones[_activeZoneIdx];
-      z.w=Math.max(3,Math.min(100-z.x,_startZone.w+(px-_startPt.px)));
-      z.h=Math.max(3,Math.min(100-z.y,_startZone.h+(py-_startPt.py)));
+      const s=_startZone;
+      if(_action==='move'){
+        z.x=Math.max(0,Math.min(100-z.w,s.x+dx));
+        z.y=Math.max(0,Math.min(100-z.h,s.y+dy));
+      }else if(_action==='edge-l'){
+        z.x=Math.max(0,Math.min(s.x+s.w-3,s.x+dx));z.w=s.w-(z.x-s.x);
+      }else if(_action==='edge-r'){
+        z.w=Math.max(3,Math.min(100-z.x,s.w+dx));
+      }else if(_action==='edge-t'){
+        z.y=Math.max(0,Math.min(s.y+s.h-3,s.y+dy));z.h=s.h-(z.y-s.y);
+      }else if(_action==='edge-b'){
+        z.h=Math.max(3,Math.min(100-z.y,s.h+dy));
+      }else if(_action==='corner-tl'){
+        z.x=Math.max(0,Math.min(s.x+s.w-3,s.x+dx));z.w=s.w-(z.x-s.x);
+        z.y=Math.max(0,Math.min(s.y+s.h-3,s.y+dy));z.h=s.h-(z.y-s.y);
+      }else if(_action==='corner-tr'){
+        z.w=Math.max(3,Math.min(100-z.x,s.w+dx));
+        z.y=Math.max(0,Math.min(s.y+s.h-3,s.y+dy));z.h=s.h-(z.y-s.y);
+      }else if(_action==='corner-bl'){
+        z.x=Math.max(0,Math.min(s.x+s.w-3,s.x+dx));z.w=s.w-(z.x-s.x);
+        z.h=Math.max(3,Math.min(100-z.y,s.h+dy));
+      }else if(_action==='corner-br'){
+        z.w=Math.max(3,Math.min(100-z.x,s.w+dx));
+        z.h=Math.max(3,Math.min(100-z.y,s.h+dy));
+      }
       renderZones();
     }
   };
@@ -915,12 +944,20 @@ function renderZones(){
     div.style.cssText=`left:${z.x}%;top:${z.y}%;width:${z.w}%;height:${z.h}%;border-color:${c};background:${c}${active?'33':'11'};border-style:${active?'solid':'dashed'};opacity:${active?'1':'0.5'};z-index:${active?'3':'1'};cursor:${active?'move':'pointer'}`;
     div.textContent=i+1;
     overlay.appendChild(div);
-    // 선택된 영역에 리사이즈 핸들 (우하단 꼭짓점)
+    // 선택된 영역에 4모서리 핸들
     if(active){
-      const handle=document.createElement('div');
-      handle.className='zone-handle';
-      handle.style.cssText=`position:absolute;left:${z.x+z.w}%;top:${z.y+z.h}%;width:14px;height:14px;background:${c};border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);cursor:nwse-resize;z-index:4`;
-      overlay.appendChild(handle);
+      const corners=[
+        {x:z.x,y:z.y,cur:'nwse-resize'},
+        {x:z.x+z.w,y:z.y,cur:'nesw-resize'},
+        {x:z.x,y:z.y+z.h,cur:'nesw-resize'},
+        {x:z.x+z.w,y:z.y+z.h,cur:'nwse-resize'},
+      ];
+      corners.forEach(cn=>{
+        const h=document.createElement('div');
+        h.className='zone-handle';
+        h.style.cssText=`position:absolute;left:${cn.x}%;top:${cn.y}%;width:12px;height:12px;background:${c};border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);cursor:${cn.cur};z-index:4;pointer-events:none`;
+        overlay.appendChild(h);
+      });
     }
   });
 

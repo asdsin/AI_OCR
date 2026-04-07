@@ -272,17 +272,19 @@ label:first-child{margin-top:0}
     <button class="btn bg" onclick="confirmZonesAndProceed()" id="btnConfirmZones" disabled>✅ 영역 확정 → 항목 선택</button>
   </div>
 
-  <!-- Step 3: 항목 선택 + OCR 값 수정 -->
+  <!-- Step 3: 항목 확인 + 값 수정/학습 -->
   <div id="refStep3" style="display:none">
-    <div class="card" style="padding:8px">
-      <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">📌 판정 항목 터치 선택 (파랑→초록) · 길게 눌러 <b>OCR 값 수정</b></div>
-      <div style="display:flex;gap:4px;margin-bottom:6px">
-        <button class="btn-sm bp" onclick="selectAllNumeric()">수치 전체선택</button>
+    <div class="card" style="padding:6px 10px">
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:4px">📌 OCR 인식 결과를 확인하고, 틀린 값은 <b>직접 수정</b>하세요</div>
+      <div style="display:flex;gap:4px">
+        <button class="btn-sm bp" onclick="selectAllNumeric()">전체 선택</button>
         <button class="btn-sm bs" onclick="clearSelection()">선택 해제</button>
       </div>
     </div>
-    <div class="analyze-wrap" id="analyzeWrap"></div>
-    <div id="selectedList"></div>
+
+    <!-- 영역별 항목 리스트 (값 수정 가능) -->
+    <div id="zoneItemsList"></div>
+
     <button class="btn bg" onclick="goStep4()" id="btnStep3" disabled>선택 완료 → 조건 입력</button>
   </div>
 
@@ -1090,29 +1092,66 @@ function confirmZonesAndProceed(){
 }
 
 function renderAnalyze(){
-  const wrap=document.getElementById('analyzeWrap');
-  let markers='';
+  const el=document.getElementById('zoneItemsList');
+  if(!el)return;
+
+  // 영역별 그룹핑
+  const zoneGroups={};
   analyzeData.detected_items.forEach((it,i)=>{
-    if(it.is_noise)return; // 노이즈 숨김
-    const cls=it.is_numeric?'numeric':'text';
-    const sel=selectedItems.has(i)?'selected':'';
-    const left=it.cx_pct - it.w_pct/2;
-    const top=it.cy_pct - it.h_pct/2;
-    const label=it._corrected_value!=null?it._corrected_value:it.is_numeric?it.value:'';
-    const edited=it._corrected_value!=null?';border-color:#f59e0b':'';
-    markers+=`<div class="det-marker ${cls} ${sel}" id="mk-${i}"
-      style="left:${left}%;top:${top}%;width:${it.w_pct}%;height:${it.h_pct}%${edited}"
-      onclick="toggleItem(${i})" oncontextmenu="editOcrValue(${i});return false">${label}</div>`;
+    const zIdx=it._zone_idx??-1;
+    if(!zoneGroups[zIdx])zoneGroups[zIdx]={name:it._zone_name||'전체',items:[]};
+    zoneGroups[zIdx].items.push({...it,_idx:i});
   });
-  wrap.innerHTML=`<img src="data:image/jpeg;base64,${analyzeData.screen_image}">${markers}`;
-  // 롱프레스 이벤트 (모바일)
-  wrap.querySelectorAll('.det-marker').forEach(el=>{
-    let timer;
-    el.addEventListener('touchstart',e=>{timer=setTimeout(()=>{const i=parseInt(el.id.replace('mk-',''));editOcrValue(i);e.preventDefault()},600)});
-    el.addEventListener('touchend',()=>clearTimeout(timer));
-    el.addEventListener('touchmove',()=>clearTimeout(timer));
+
+  let html='';
+  Object.entries(zoneGroups).forEach(([zIdx,group])=>{
+    const c=ZONE_COLORS[parseInt(zIdx)%ZONE_COLORS.length]||'#3b82f6';
+    html+=`<div class="card" style="padding:8px;border-left:3px solid ${c}">
+      <div style="font-size:12px;font-weight:700;color:${c};margin-bottom:6px">${group.name}</div>`;
+
+    group.items.forEach(it=>{
+      if(it.is_noise)return;
+      const i=it._idx;
+      const sel=selectedItems.has(i);
+      const val=it._corrected_value!=null?it._corrected_value:(it.is_numeric?it.value:null);
+      const edited=it._corrected_value!=null;
+
+      html+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b" id="item-${i}">
+        <input type="checkbox" ${sel?'checked':''} onchange="toggleItem(${i})" style="width:18px;height:18px;accent-color:#22c55e">
+        <span style="font-size:14px;font-weight:700;min-width:50px;color:${it.is_numeric?'#6ee7b7':'#94a3b8'}">${val!=null?val.toFixed?val.toFixed(1):val:'—'}</span>
+        <span style="flex:1;font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis">${it.text}</span>
+        <span style="font-size:10px;color:#475569">${(it.confidence*100).toFixed(0)}%</span>
+        <input type="number" step="0.1" value="${val??''}" placeholder="실제값"
+          onchange="correctValue(${i},this.value)"
+          style="width:60px;padding:3px;background:#0f172a;border:1px solid ${edited?'#f59e0b':'#334155'};border-radius:4px;color:#e2e8f0;font-size:12px;text-align:center">
+        <button onclick="markAsNoise(${i})" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:12px" title="노이즈 제거">🚫</button>
+      </div>`;
+    });
+
+    html+=`</div>`;
   });
-  updateSelectedList();
+
+  if(!html)html='<div style="text-align:center;color:#64748b;padding:16px">영역 OCR 테스트를 먼저 실행하세요</div>';
+  el.innerHTML=html;
+
+  // 선택 상태 업데이트
+  document.getElementById('btnStep3').disabled=selectedItems.size===0;
+}
+
+function correctValue(i,val){
+  const it=analyzeData.detected_items[i];if(!it)return;
+  const numVal=parseFloat(val);
+  if(!isNaN(numVal)){
+    it._corrected_value=numVal;
+    it.value=numVal;
+    it.is_numeric=true;
+    // 학습 데이터 저장
+    let learns=JSON.parse(localStorage.getItem('plc_ocr_learns')||'[]');
+    learns.push({original:it.text,corrected:numVal,ts:new Date().toISOString()});
+    if(learns.length>500)learns=learns.slice(-500);
+    localStorage.setItem('plc_ocr_learns',JSON.stringify(learns));
+  }
+  renderAnalyze();
 }
 
 function editOcrValue(i){
@@ -1145,32 +1184,18 @@ function markAsNoise(i){
 function toggleItem(i){
   if(selectedItems.has(i))selectedItems.delete(i);
   else selectedItems.add(i);
-  const mk=document.getElementById('mk-'+i);
-  if(mk)mk.classList.toggle('selected');
-  updateSelectedList();
+  renderAnalyze();
 }
 
 function selectAllNumeric(){
   analyzeData.detected_items.forEach((it,i)=>{
-    if(it.is_numeric){selectedItems.add(i);
-      const mk=document.getElementById('mk-'+i);if(mk)mk.classList.add('selected');}
+    if(it.is_numeric&&!it.is_noise)selectedItems.add(i);
   });
-  updateSelectedList();
+  renderAnalyze();
 }
 function clearSelection(){
   selectedItems.clear();
-  document.querySelectorAll('.det-marker.selected').forEach(el=>el.classList.remove('selected'));
-  updateSelectedList();
-}
-
-function updateSelectedList(){
-  const el=document.getElementById('selectedList');
-  document.getElementById('btnStep3').disabled=selectedItems.size===0;
-  if(!selectedItems.size){el.innerHTML='';return}
-  const items=[...selectedItems].map(i=>analyzeData.detected_items[i]);
-  el.innerHTML=`<div class="card" style="padding:8px"><div style="font-size:12px;color:#94a3b8;margin-bottom:4px">선택됨: ${items.length}개</div>`+
-    items.map(it=>`<span style="display:inline-block;background:#065f46;color:#6ee7b7;padding:2px 8px;border-radius:4px;font-size:12px;margin:2px">${it.is_numeric?it.value:it.text}</span>`).join('')+
-    '</div>';
+  renderAnalyze();
 }
 
 // ═══ Step 4: 조건 입력 ═══

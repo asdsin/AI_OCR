@@ -44,6 +44,8 @@ class SmartOcrService:
 
     # OCR 최적 파라미터 (PLC 수치 인식용)
     _OCR_PARAMS = {
+        "decoder": "beamsearch",     # greedy → beamsearch (정확도↑)
+        "beamWidth": 10,
         "text_threshold": 0.4,
         "link_threshold": 0.2,
         "low_text": 0.3,

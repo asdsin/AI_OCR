@@ -341,18 +341,24 @@ async def test_zone_ocr(
         screen, _ = detect_screen(img)
         h, w = screen.shape[:2]
 
-        # 영역 크롭
-        x = max(0, int(w * x_pct / 100))
-        y = max(0, int(h * y_pct / 100))
-        cw = max(1, int(w * w_pct / 100))
-        ch = max(1, int(h * h_pct / 100))
+        # 영역 크롭 (여유 마진 포함 — 가장자리 숫자 잘림 방지)
+        margin_x = max(5, int(w * 0.01))  # 1% 또는 최소 5px
+        margin_y = max(5, int(h * 0.01))
+        x = max(0, int(w * x_pct / 100) - margin_x)
+        y = max(0, int(h * y_pct / 100) - margin_y)
+        cw = min(w - x, int(w * w_pct / 100) + margin_x * 2)
+        ch = min(h - y, int(h * h_pct / 100) + margin_y * 2)
         cropped = screen[y:y+ch, x:x+cw]
 
-        # 업스케일링: 크롭 이미지가 작으면 확대 (OCR 정확도↑)
+        # 업스케일링 + 흰색 패딩 (가장자리 문자 감지↑)
         crop_h, crop_w = cropped.shape[:2]
         if max(crop_h, crop_w) < 500:
             scale = 800 / max(crop_h, crop_w)
             cropped = cv2.resize(cropped, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        # 패딩 추가 (EasyOCR CRAFT는 에지 텍스트를 놓침)
+        pad = 15
+        cropped = cv2.copyMakeBorder(cropped, pad, pad, pad, pad,
+                                      cv2.BORDER_CONSTANT, value=[255, 255, 255] if len(cropped.shape) == 3 else 255)
 
         # OCR
         loop = asyncio.get_event_loop()

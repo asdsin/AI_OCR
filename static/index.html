@@ -794,22 +794,26 @@ function initZoneEditor(){
 
   const wrap=document.getElementById('zoneWrap');
   const overlay=document.getElementById('zoneOverlay');
-  let _action=null; // 'draw','move','edge-t','edge-b','edge-l','edge-r','corner-tl','corner-tr','corner-bl','corner-br'
+  let _action=null;
   let _startPt={}, _startZone={};
-  const E=2.5; // 테두리 감지 두께 (%)
 
   function _detectEdge(px,py,z){
+    // 테두리 감지 폭: 영역 크기의 15%, 최소 1.5%, 최대 4%
+    const ex=Math.max(1.5, Math.min(4, z.w*0.15));
+    const ey=Math.max(1.5, Math.min(4, z.h*0.15));
     // 영역 밖이면 null
-    if(px<z.x-E||px>z.x+z.w+E||py<z.y-E||py>z.y+z.h+E)return null;
-    const nearL=Math.abs(px-z.x)<E, nearR=Math.abs(px-(z.x+z.w))<E;
-    const nearT=Math.abs(py-z.y)<E, nearB=Math.abs(py-(z.y+z.h))<E;
+    if(px<z.x-ex||px>z.x+z.w+ex||py<z.y-ey||py>z.y+z.h+ey)return null;
+    const nearL=Math.abs(px-z.x)<ex, nearR=Math.abs(px-(z.x+z.w))<ex;
+    const nearT=Math.abs(py-z.y)<ey, nearB=Math.abs(py-(z.y+z.h))<ey;
     // 모서리 (우선)
     if(nearT&&nearL)return 'corner-tl'; if(nearT&&nearR)return 'corner-tr';
     if(nearB&&nearL)return 'corner-bl'; if(nearB&&nearR)return 'corner-br';
-    // 테두리
+    // 테두리 (가장자리에만 반응)
     if(nearT)return 'edge-t'; if(nearB)return 'edge-b';
     if(nearL)return 'edge-l'; if(nearR)return 'edge-r';
-    // 내부
+    // 내부 = 이동
+    if(px>z.x+ex&&px<z.x+z.w-ex&&py>z.y+ey&&py<z.y+z.h-ey)return 'move';
+    // 테두리와 내부 사이 경계 → 이동 우선
     if(px>=z.x&&px<=z.x+z.w&&py>=z.y&&py<=z.y+z.h)return 'move';
     return null;
   }

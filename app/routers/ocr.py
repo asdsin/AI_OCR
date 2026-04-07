@@ -348,6 +348,12 @@ async def test_zone_ocr(
         ch = max(1, int(h * h_pct / 100))
         cropped = screen[y:y+ch, x:x+cw]
 
+        # 업스케일링: 크롭 이미지가 작으면 확대 (OCR 정확도↑)
+        crop_h, crop_w = cropped.shape[:2]
+        if max(crop_h, crop_w) < 500:
+            scale = 800 / max(crop_h, crop_w)
+            cropped = cv2.resize(cropped, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+
         # OCR
         loop = asyncio.get_event_loop()
         ocr_result = await loop.run_in_executor(

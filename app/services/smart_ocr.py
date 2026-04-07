@@ -42,14 +42,71 @@ class SmartOcrService:
     def __init__(self):
         self._reader = None
 
+    # OCR 최적 파라미터 (PLC 수치 인식용)
+    _OCR_PARAMS = {
+        "text_threshold": 0.4,
+        "link_threshold": 0.2,
+        "low_text": 0.3,
+        "width_ths": 0.8,
+        "mag_ratio": 1.5,
+        "min_size": 10,
+        "contrast_ths": 0.3,
+        "adjust_contrast": 0.7,
+    }
+    _OCR_PARAMS_NUMERIC = {
+        **_OCR_PARAMS,
+        "allowlist": "0123456789.,-+AV°C%",
+    }
+    # OCR 후처리
+    _FIX = str.maketrans({'O':'0','o':'0','I':'1','l':'1','S':'5','B':'8','_':'.','|':'1'})
+
     def _get_reader(self):
         if self._reader is None:
             import easyocr
             self._reader = easyocr.Reader(['ko', 'en'], gpu=False, verbose=False)
         return self._reader
 
+    @staticmethod
+    def _preprocess_plc(img):
+        """PLC 화면 전처리: 색상 배경 제거 + 적응 이진화"""
+        import cv2
+        if len(img.shape) < 3:
+            return img
+        h, w = img.shape[:2]
+        # 해상도 정규화
+        if max(h, w) > 2000:
+            s = 1500 / max(h, w)
+            img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+        elif max(h, w) < 500:
+            s = 800 / max(h, w)
+            img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_CUBIC)
+        # 색상 배경 제거
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        result = img.copy()
+        result[hsv[:, :, 1] > 60] = [255, 255, 255]
+        # 그레이 + 적응 이진화
+        gray = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
+        binary = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                        cv2.THRESH_BINARY, blockSize=15, C=8)
+        # 모폴로지 + 패딩
+        kernel = np.ones((2, 2), np.uint8)
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+        binary = cv2.copyMakeBorder(binary, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value=255)
+        return binary
+
+    @staticmethod
+    def _postprocess(text):
+        """OCR 후처리: 흔한 오인식 보정"""
+        t = text.strip()
+        if re.search(r'\d', t):
+            t = t.translate(SmartOcrService._FIX)
+            t = re.sub(r'(\d)[_,](\d)', r'\1.\2', t)
+            t = re.sub(r'(\d)\s*\.\s*(\d)', r'\1.\2', t)
+            t = re.sub(r'(\d{1,3})\s+(\d{1})(?!\d)', r'\1.\2', t)
+        return t
+
     def extract_values(self, screen_img: np.ndarray) -> SmartOcrResult:
-        """화면 이미지에서 수치값을 자동 추출 (패턴 기반 노이즈 필터링)"""
+        """화면 이미지에서 수치값을 자동 추출 (전처리+듀얼패스+후처리)"""
         from app.services.plc_patterns import (
             is_noise as pattern_is_noise, classify_value,
             suggest_screen_type, detect_manufacturer, VALUE_CONTEXT_LABELS
@@ -59,7 +116,9 @@ class SmartOcrService:
         h, w = screen_img.shape[:2]
 
         reader = self._get_reader()
-        results = reader.readtext(screen_img)
+        # 원본 이미지 + 최적 파라미터 + 후처리
+        results_raw = reader.readtext(screen_img, **self._OCR_PARAMS)
+        results = [(bbox, self._postprocess(text), conf) for bbox, text, conf in results_raw]
 
         # 1차: 전체 텍스트 수집 → 화면 유형 + 제조사 추정
         all_texts = [text.strip() for _, text, _ in results if text.strip()]
@@ -132,7 +191,11 @@ class SmartOcrService:
 
         h, w = screen_img.shape[:2]
         reader = self._get_reader()
-        results = reader.readtext(screen_img)
+
+        # 원본 이미지 기반 OCR (위치 정확도 보장) + 최적 파라미터
+        results_raw = reader.readtext(screen_img, **self._OCR_PARAMS)
+        # 후처리 적용
+        results = [(bbox, self._postprocess(text), conf) for bbox, text, conf in results_raw]
 
         # 화면 유형 추정
         all_texts = [t.strip() for _, t, _ in results if t.strip()]

@@ -462,14 +462,14 @@ async function onCompanyChange(){
 
 async function refreshTable(){
   const cid=document.getElementById('selCompany').value;
-  const tbody=document.getElementById('qrTableBody');
-  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b">로딩 중...</td></tr>';
+  const el=document.getElementById('qrCardList');
+  el.innerHTML='<div style="text-align:center;padding:20px;color:#64748b">로딩 중...</div>';
   try{
     const url=cid?`/api/qr/points/all?company_id=${cid}`:'/api/qr/points/all';
     _allQrData=await api(url);
     onFilterChange();
   }catch(e){
-    tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:20px;color:#fca5a5">${e.message}</td></tr>`;
+    el.innerHTML=`<div style="text-align:center;padding:20px;color:#fca5a5">${e.message}</div>`;
   }
 }
 

@@ -261,9 +261,10 @@ label:first-child{margin-top:0}
   <div id="refStep3" style="display:none">
     <div class="card" style="padding:6px 10px">
       <div style="font-size:12px;color:#94a3b8;margin-bottom:4px">📌 OCR 인식 결과를 확인하고, 틀린 값은 <b>직접 수정</b>하세요</div>
-      <div style="display:flex;gap:4px">
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
         <button class="btn-sm bp" onclick="selectAllNumeric()">전체 선택</button>
         <button class="btn-sm bs" onclick="clearSelection()">선택 해제</button>
+        <button class="btn-sm by" onclick="undoRemove()" id="btnUndo" style="display:none">↩ 되돌리기</button>
       </div>
     </div>
 
@@ -1186,6 +1187,8 @@ function renderAnalyze(){
   if(!html)html='<div style="text-align:center;color:#64748b;padding:16px">영역 OCR 테스트를 먼저 실행하세요</div>';
   el.innerHTML=html;
   document.getElementById('btnStep3').disabled=selectedItems.size===0;
+  const undoBtn=document.getElementById('btnUndo');
+  if(undoBtn)undoBtn.style.display=_removedItems.length>0?'inline-block':'none';
 }
 
 function toggleZoneExpand(zi){
@@ -1232,11 +1235,27 @@ function editOcrValue(i){
   document.getElementById('modal1').classList.add('show');
 }
 
+let _removedItems=[]; // 삭제된 항목 스택 (되돌리기용)
+
 function markAsNoise(i){
-  analyzeData.detected_items[i].is_noise=true;
-  analyzeData.detected_items[i].is_numeric=false;
+  const it=analyzeData.detected_items[i];
+  // 원본 상태 저장
+  _removedItems.push({idx:i, was_noise:it.is_noise, was_numeric:it.is_numeric, value:it.value, text:it.text});
+  it.is_noise=true;
+  it.is_numeric=false;
   selectedItems.delete(i);
   closeM1();renderAnalyze();
+}
+
+function undoRemove(){
+  if(!_removedItems.length)return;
+  const last=_removedItems.pop();
+  const it=analyzeData.detected_items[last.idx];
+  it.is_noise=last.was_noise;
+  it.is_numeric=last.was_numeric;
+  it.value=last.value;
+  it.text=last.text;
+  renderAnalyze();
 }
 
 function toggleItem(i){

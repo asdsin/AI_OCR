@@ -31,9 +31,18 @@ class InspectionResult(Base):
     operator_note = Column(String)          # 작업자 메모
     corrected_yn = Column(Boolean, default=False)  # 정답 보정 여부
 
+    # ── 2단계: 예외 처리 + AI 보조 ──
+    exception_flag = Column(Boolean, default=False)           # 예외 케이스 여부
+    exception_reason = Column(String(100))                    # 예외 사유 (low_confidence / near_boundary / error_judgment 등)
+    ai_assist_requested = Column(Boolean, default=False)      # AI 보조 요청 여부
+    ai_assist_completed = Column(Boolean, default=False)      # AI 보조 완료 여부
+    final_result_source = Column(String(20), default='rule')  # 최종 출처: rule / ai_assist / manual_correction
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # 관계
     equipment = relationship("Equipment", back_populates="results")
     template = relationship("InspectionTemplate", back_populates="results")
     corrections = relationship("CorrectionLog", back_populates="inspection_result", cascade="all, delete-orphan")
+    ai_assists = relationship("AiAssistResult", back_populates="inspection_result", cascade="all, delete-orphan")
+    ai_call_logs = relationship("AiCallLog", back_populates="inspection_result", cascade="all, delete-orphan")

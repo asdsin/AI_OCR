@@ -15,6 +15,11 @@ class InspectionResultCreate(BaseModel):
     confidence: float | None = None         # OCR 신뢰도
     image_path: str | None = None           # 이미지 경로
     operator_note: str | None = None        # 작업자 메모
+    # 2단계: 예외 + AI 보조
+    exception_flag: bool = False
+    exception_reason: str | None = None
+    ai_assist_requested: bool = False
+    final_result_source: str = 'rule'       # rule / ai_assist / manual_correction
 
 
 class InspectionResultUpdate(BaseModel):
@@ -39,6 +44,12 @@ class InspectionResultResponse(BaseModel):
     image_path: str | None
     operator_note: str | None
     corrected_yn: bool
+    # 2단계
+    exception_flag: bool | None
+    exception_reason: str | None
+    ai_assist_requested: bool | None
+    ai_assist_completed: bool | None
+    final_result_source: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

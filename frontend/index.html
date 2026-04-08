@@ -587,14 +587,60 @@ async function startJudgment() {
     const cropB64 = cropped.toDataURL('image/jpeg', 0.9);
     const procB64 = processed.toDataURL('image/jpeg', 0.9);
 
-    // 3. OCR 실행
+    // 3. OCR 실행 (Tesseract.js → 실패 시 서버 PaddleOCR 폴백)
     document.getElementById('loadingText').textContent = 'OCR 분석 중...';
-    const ocrData = await runOcr(processed);
-    const rawText = ocrData.text.trim();
-    const confidence = Math.round(ocrData.confidence) / 100;  // 0~1
+    let rawText = '', confidence = 0;
+
+    // 3a. Tesseract.js (브라우저)
+    try {
+      const ocrData = await runOcr(processed);
+      rawText = ocrData.text.trim();
+      confidence = Math.round(ocrData.confidence) / 100;
+    } catch(e) { console.warn('Tesseract.js 실패:', e); }
+
+    // 3b. 결과가 없거나 신뢰도 낮으면 서버 PaddleOCR 폴백
+    if (!rawText || confidence < 0.3) {
+      document.getElementById('loadingText').textContent = 'PaddleOCR 분석 중...';
+      try {
+        const roi = appState.roi;
+        const blob = await (await fetch(appState.capturedImage)).blob();
+        const form = new FormData();
+        form.append('image', blob, 'capture.jpg');
+        form.append('x_pct', roi.x); form.append('y_pct', roi.y);
+        form.append('w_pct', roi.w); form.append('h_pct', roi.h);
+        const srvRes = await fetch(API + '/ocr/multi-zone', { method: 'POST', body: form });
+        if (srvRes.ok) {
+          const srvData = await srvRes.json();
+          if (srvData.value != null) {
+            rawText = srvData.text || String(srvData.value);
+            confidence = srvData.confidence || 0.9;
+          }
+        }
+      } catch(e) { console.warn('서버 OCR 폴백 실패:', e); }
+    }
 
     // 4. 수치 파싱
-    const parsedValue = parseNumericValue(rawText);
+    let parsedValue = parseNumericValue(rawText);
+
+    // 4b. 자릿수 포맷 필터 (소수점 복원: 430→43.0)
+    const tmpl = appState.selectedTemplate;
+    if (parsedValue !== null && tmpl) {
+      // 기본 3자리 + 소수점 추정 (규칙의 min/max 범위로 판단)
+      const rule = appState.selectedRule;
+      if (rule && rule.max_value && parsedValue > rule.max_value * 2) {
+        // 값이 기준의 2배 이상이면 소수점이 빠진 것으로 추정
+        // 예: max=80, parsed=168 → OK (정상)
+        // 예: max=45, parsed=430 → 43.0으로 보정
+        const digits = String(Math.round(rule.max_value)).length;
+        const rawStr = String(Math.round(parsedValue));
+        if (rawStr.length > digits) {
+          const intPart = rawStr.substring(0, digits);
+          const decPart = rawStr.substring(digits);
+          parsedValue = parseFloat(intPart + '.' + decPart);
+          rawText += ` (→${parsedValue} 자동보정)`;
+        }
+      }
+    }
 
     // 5. 판정
     const rule = appState.selectedRule;

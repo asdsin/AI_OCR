@@ -38,4 +38,6 @@ def get_db():
 def init_db():
     """테이블 자동 생성 — 서버 시작 시 호출"""
     os.makedirs(DB_DIR, exist_ok=True)
+    # 모든 모델을 import해야 Base.metadata에 테이블이 등록됨
+    import app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)

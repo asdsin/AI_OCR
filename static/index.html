@@ -1368,6 +1368,7 @@ async function saveProfile(){
     created_at:new Date().toISOString(),
     total_items:rules.length,
     detected_items_count:analyzeData?.total_detected||0,
+    _zones:analyzeData?._zones||_zones.map(z=>({x:z.x,y:z.y,w:z.w,h:z.h,name:z.name})),
   };
 
   // 서버에 프로필 저장 (QR 포인트가 선택된 경우)
@@ -1505,25 +1506,83 @@ async function submitJudge(){
   document.getElementById('judgePrev').style.display='none';
   document.getElementById('judging').style.display='block';
 
-  const form=new FormData();form.append('image',blob,'plc.jpg');
-  if(profileRules.length>0){
-    const nr=profileRules.find(r=>r.is_numeric);
-    if(nr){
-      form.append('warn_max',nr.ok_max||45);
-      form.append('error_max',(nr.ok_max||45)+5);
-      form.append('warn_min',nr.ok_min||20);
-      form.append('error_min',Math.max(0,(nr.ok_min||20)-5));
-    }
-  }
-
+  const start=Date.now();
   try{
-    const res=await fetch(API+'/api/ocr/smart',{method:'POST',body:form});
-    if(!res.ok)throw new Error(`${res.status}`);
-    const data=await res.json();
-    if(profileRules.length>0)applyProfileJudgment(data);
-    data._path=_getPath()+(selEquipName?' > '+selEquipName:'');
-    data._time=new Date().toLocaleString('ko-KR');
-    showResult(data);sw('result');
+    // 프로필에 영역 정보가 있으면 → 영역별 개별 OCR (크롭 이미지 포함)
+    const profileKey=`profile_${selQrCode||selEquipId||'default'}`;
+    const saved=localStorage.getItem(profileKey);
+    const profile=saved?JSON.parse(saved):null;
+    const zones=(profile?.rules||[]).filter(r=>r.cx_pct!=null);
+
+    let values=[];
+    let overall='ok';
+
+    if(zones.length>0 && profile._zones){
+      // 영역별 멀티엔진 OCR
+      for(const z of profile._zones){
+        const form=new FormData();form.append('image',blob,'plc.jpg');
+        form.append('x_pct',z.x);form.append('y_pct',z.y);
+        form.append('w_pct',z.w);form.append('h_pct',z.h);
+        try{
+          const res=await fetch(API+'/api/ocr/multi-zone',{method:'POST',body:form});
+          if(!res.ok)continue;
+          const data=await res.json();
+          // 해당 영역의 프로필 규칙 매칭
+          const matchedRules=profileRules.filter(r=>r.is_numeric);
+          let level='ok', reason='';
+          if(data.value!=null && matchedRules.length>0){
+            const rule=matchedRules.find(r=>
+              r.value_range_min!=null&&r.value_range_max!=null&&
+              data.value>=r.value_range_min&&data.value<=r.value_range_max
+            )||matchedRules[0];
+            if(rule){
+              if(rule.condition==='range'){
+                if(data.value>=rule.ok_min&&data.value<=rule.ok_max){level='ok';reason=`${data.value} ∈ [${rule.ok_min}~${rule.ok_max}]`}
+                else{level='ng';reason=`${data.value} ∉ [${rule.ok_min}~${rule.ok_max}]`}
+              }else if(rule.condition==='min'){
+                if(data.value>=rule.threshold){level='ok';reason=`${data.value} ≥ ${rule.threshold}`}
+                else{level='ng';reason=`${data.value} < ${rule.threshold}`}
+              }else if(rule.condition==='max'){
+                if(data.value<=rule.threshold){level='ok';reason=`${data.value} ≤ ${rule.threshold}`}
+                else{level='ng';reason=`${data.value} > ${rule.threshold}`}
+              }
+            }
+          } else if(data.value==null){
+            level='unknown';reason='인식 실패';
+          }
+          if(level==='ng')overall='ng';
+          else if(level==='warning'&&overall!=='ng')overall='warning';
+
+          values.push({
+            value:data.value, text:data.text||'', confidence:data.confidence||0,
+            level, reason, rule_name:z.name||'영역',
+            _cropImage:data.crop_image, // 크롭 이미지!
+            _engines:data.engines||[], _method:data.method||''
+          });
+        }catch(e){
+          values.push({value:null,text:'',confidence:0,level:'unknown',reason:'OCR 실패',rule_name:z.name||'영역',_cropImage:null});
+        }
+      }
+    } else {
+      // 영역 없음 → 전체 스마트 OCR (기존 방식)
+      const form=new FormData();form.append('image',blob,'plc.jpg');
+      form.append('warn_max','45');form.append('error_max','50');
+      form.append('warn_min','20');form.append('error_min','15');
+      const res=await fetch(API+'/api/ocr/smart',{method:'POST',body:form});
+      if(!res.ok)throw new Error(`${res.status}`);
+      const data=await res.json();
+      if(profileRules.length>0)applyProfileJudgment(data);
+      values=data.values||[];
+      overall=data.overall||'ok';
+    }
+
+    const elapsed=((Date.now()-start)/1000).toFixed(1);
+    const resultData={
+      overall, values, total_detected:values.length,
+      processing_ms:Date.now()-start,
+      _path:_getPath(), _time:new Date().toLocaleString('ko-KR')
+    };
+    showResult(resultData);sw('result');
   }catch(err){alert('판정 실패: '+err.message)}
   finally{
     document.getElementById('judging').style.display='none';
@@ -1595,22 +1654,20 @@ function showResult(d){
     else criteria=reason;
 
     return `<div style="background:#1e293b;border-radius:8px;overflow:hidden;margin-bottom:6px;border-left:4px solid ${lvColor}">
-      <div style="display:flex;gap:0">
-        ${v._cropImage?`<div style="width:80px;min-height:50px;background:#000;flex-shrink:0;display:flex;align-items:center;justify-content:center">
-          <img src="data:image/jpeg;base64,${v._cropImage}" style="max-width:100%;max-height:60px;object-fit:contain">
+        ${v._cropImage?`<div style="width:100%;background:#000;border-radius:6px 6px 0 0;padding:4px;display:flex;align-items:center;justify-content:center">
+          <img src="data:image/jpeg;base64,${v._cropImage}" style="max-width:100%;max-height:80px;object-fit:contain;border-radius:4px">
         </div>`:''}
-        <div style="flex:1;padding:8px">
+        <div style="padding:8px">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <span style="font-size:22px;font-weight:900;color:${lvColor}">${v.value?.toFixed(1)??'—'}</span>
-            <span style="background:${lvBg};color:${lvColor};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">${lvText}</span>
+            <span style="font-size:24px;font-weight:900;color:${lvColor}">${v.value?.toFixed(1)??'—'}</span>
+            <span style="background:${lvBg};color:${lvColor};padding:3px 10px;border-radius:4px;font-size:12px;font-weight:700">${lvText}</span>
+            <span style="margin-left:auto">
+              <button class="btn-sm bs" onclick="openFix(${i})" style="font-size:11px;padding:4px 8px">✏️ 수정</button>
+            </span>
           </div>
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">📋 ${ruleName}</div>
-          <div style="font-size:10px;color:#64748b">${criteria}</div>
+          <div style="font-size:12px;color:#94a3b8;margin-bottom:2px">📋 ${ruleName}${v._engines?.length?' · '+v._engines.join('+'):''}</div>
+          <div style="font-size:11px;color:#64748b">${criteria}</div>
         </div>
-        <div style="display:flex;flex-direction:column;justify-content:center;padding:4px">
-          <button class="btn-sm bs" onclick="openFix(${i})" style="font-size:10px;padding:4px 6px">✏️</button>
-        </div>
-      </div>
     </div>`;
   }).join('');
 

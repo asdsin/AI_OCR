@@ -568,6 +568,34 @@ function judgeNumeric(value, rule) {
 // ═══════════════════════════════════
 // 신호형/색상형: ROI 영역 밝기·색상 분석
 // ═══════════════════════════════════
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0, s = max === 0 ? 0 : d / max, v = max;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  return { h: Math.round(h * 360), s: Math.round(s * 100), v: Math.round(v * 100) };
+}
+
+function classifyColorByHsv(h, s, v) {
+  // 어두우면 소등
+  if (v < 20) return 'dark';
+  // 채도 낮으면 무채색
+  if (s < 15) return v > 80 ? 'white' : 'dark';
+  // H값 기준 색상 분류 (0~360)
+  if (h <= 30 || h > 330) return 'red';
+  if (h > 30 && h <= 90) return 'yellow';
+  if (h > 90 && h <= 150) return 'green';
+  if (h > 150 && h <= 210) return 'cyan';
+  if (h > 210 && h <= 270) return 'blue';
+  if (h > 270 && h <= 330) return 'purple';
+  return 'mixed';
+}
+
 function analyzeSignal(canvas) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
@@ -575,6 +603,7 @@ function analyzeSignal(canvas) {
   const d = imgData.data;
   const total = w * h;
 
+  // 평균 RGB
   let sumR = 0, sumG = 0, sumB = 0;
   for (let i = 0; i < d.length; i += 4) {
     sumR += d[i]; sumG += d[i+1]; sumB += d[i+2];
@@ -584,30 +613,18 @@ function analyzeSignal(canvas) {
   const avgB = Math.round(sumB / total);
   const brightness = Math.round((avgR + avgG + avgB) / 3);
 
-  // 지배 색상 판별
-  let dominantColor = 'none';
-  if (brightness < 40) {
-    dominantColor = 'dark';  // 소등
-  } else if (avgG > avgR * 1.3 && avgG > avgB * 1.3) {
-    dominantColor = 'green';
-  } else if (avgR > avgG * 1.3 && avgR > avgB * 1.3) {
-    dominantColor = 'red';
-  } else if (avgB > avgR * 1.3 && avgB > avgG * 1.3) {
-    dominantColor = 'blue';
-  } else if (avgR > 150 && avgG > 100 && avgB < 80) {
-    dominantColor = 'yellow';
-  } else if (brightness > 200) {
-    dominantColor = 'white';
-  } else {
-    dominantColor = 'mixed';
-  }
+  // RGB → HSV 변환으로 색상 분류
+  const hsv = rgbToHsv(avgR, avgG, avgB);
+  const dominantColor = classifyColorByHsv(hsv.h, hsv.s, hsv.v);
 
-  const colorNames = { dark:'소등', green:'녹색', red:'빨간색', blue:'파란색', yellow:'노란색', white:'흰색', mixed:'혼합', none:'없음' };
+  const colorNames = { dark:'소등', green:'녹색', red:'빨간색', blue:'파란색',
+    yellow:'노란색', white:'흰색', cyan:'청록', purple:'보라', mixed:'혼합' };
 
   return {
     avgR, avgG, avgB, brightness, dominantColor,
+    hsv, // HSV 값도 포함
     colorName: colorNames[dominantColor] || dominantColor,
-    summary: `밝기=${brightness} RGB=(${avgR},${avgG},${avgB}) ${colorNames[dominantColor]}`,
+    summary: `밝기=${brightness} HSV=(${hsv.h}°,${hsv.s}%,${hsv.v}%) ${colorNames[dominantColor]}`,
     confidence: brightness > 20 ? 0.9 : 0.5,
   };
 }
@@ -818,8 +835,9 @@ function showResult(r) {
       <div class="result-row"><span class="label">설비</span><span class="value">${r.equipment?.equipment_name || '—'}</span></div>
       <div class="result-row"><span class="label">검사항목</span><span class="value">${r.template?.template_name || '—'}</span></div>
       <div class="result-row"><span class="label">평균 RGB</span><span class="value" style="font-family:monospace">R=${sd.avgR} G=${sd.avgG} B=${sd.avgB}</span></div>
+      <div class="result-row"><span class="label">HSV</span><span class="value" style="font-family:monospace">H=${sd.hsv?.h||0}° S=${sd.hsv?.s||0}% V=${sd.hsv?.v||0}%</span></div>
       <div class="result-row"><span class="label">평균 밝기</span><span class="value">${sd.brightness}</span></div>
-      <div class="result-row"><span class="label">지배 색상</span><span class="value">${sd.colorName}</span></div>
+      <div class="result-row"><span class="label">감지 색상</span><span class="value">${sd.colorName}</span></div>
       <div class="result-row"><span class="label">판정 사유</span><span class="value">${r.judgment.reason}</span></div>
       <div class="result-row"><span class="label">신뢰도</span><span class="value">${Math.round(r.confidence * 100)}%</span></div>`;
   } else {

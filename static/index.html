@@ -1020,6 +1020,19 @@ function renderZoneDetail(){
       <span style="color:#64748b">H</span><input class="inp" type="number" value="${z.h.toFixed(1)}" onchange="_zones[${i}].h=+this.value;_zones[${i}].ocrResult=null;renderZones()" style="width:48px;padding:3px;margin:0;font-size:11px">
       <span style="color:#475569">%</span>
     </div>
+    <div style="background:#0f172a;border-radius:4px;padding:6px;margin-bottom:6px">
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px">📏 값 포맷</div>
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+        <select class="inp" style="width:auto;margin:0;padding:3px 6px;font-size:11px" onchange="_zones[${i}].fmt_type=this.value;renderZones()" id="fmtType-${i}">
+          <option value="num" ${(z.fmt_type||'num')==='num'?'selected':''}>숫자</option>
+          <option value="text" ${z.fmt_type==='text'?'selected':''}>문자(OK/NG)</option>
+        </select>
+        <span style="font-size:10px;color:#64748b" id="fmtNumOpts-${i}">
+          정수<input type="number" min="1" max="6" value="${z.fmt_digits||3}" onchange="_zones[${i}].fmt_digits=+this.value" style="width:32px;padding:2px;margin:0 2px;background:#1e293b;border:1px solid #334155;border-radius:3px;color:#e2e8f0;font-size:11px;text-align:center">자리
+          <label style="margin:0;display:inline"><input type="checkbox" ${z.fmt_decimal?'checked':''} onchange="_zones[${i}].fmt_decimal=this.checked" style="width:14px;height:14px;margin:0 2px;vertical-align:middle"> 소수점</label>
+        </span>
+      </div>
+    </div>
     <div style="display:flex;gap:4px;margin-bottom:6px">
       <button class="btn-sm bp" onclick="testSingleZone(${i})">🔍 테스트</button>
       <button class="btn-sm bd" onclick="deleteZone(${i})">🗑 삭제</button>
@@ -1042,30 +1055,41 @@ async function testSingleZone(i){
     const res=await fetch(API+'/api/ocr/multi-zone',{method:'POST',body:form});
     if(!res.ok)throw new Error(`${res.status}`);
     const data=await res.json();
-    // 결과를 기존 형식으로 변환
+    // 포맷 필터 적용 후 결과 변환
     _zones[i].cropImage=data.crop_image;
-    if(data.value!=null){
+    let finalValue=data.value;
+    let finalText=data.text||'';
+
+    // 포맷 기반 필터링
+    if(finalValue!=null){
+      finalValue=applyFormat(finalValue, finalText, z);
+    }
+    // all_attempts에서도 포맷 적용 후 최적값 선택
+    if(data.all_attempts){
+      const candidates=data.all_attempts
+        .filter(a=>a.value!=null)
+        .map(a=>({...a, filtered:applyFormat(a.value, a.fixed||a.raw, z)}))
+        .filter(a=>a.filtered!=null);
+      if(candidates.length>0){
+        // 포맷에 맞는 후보 중 가장 많이 나온 값
+        const counts={};
+        candidates.forEach(c=>{const k=c.filtered;counts[k]=(counts[k]||0)+1});
+        const bestVal=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+        if(bestVal)finalValue=parseFloat(bestVal[0]);
+      }
+    }
+
+    if(finalValue!=null){
       _zones[i].ocrResult=[{
-        text:data.text||String(data.value),
-        value:data.value,
-        is_numeric:true,
+        text:String(finalValue),
+        value:finalValue,
+        is_numeric:z.fmt_type!=='text',
         is_noise:false,
         confidence:data.confidence,
         cx_pct:50,cy_pct:50,w_pct:80,h_pct:80,
-        _method:data.method
+        _method:data.method,
+        _raw:data.text // 원본 OCR 텍스트
       }];
-      // 추가 시도 결과도 표시
-      if(data.all_attempts){
-        data.all_attempts.forEach((a,j)=>{
-          if(a.value!=null&&Math.abs(a.value-data.value)>0.1){
-            _zones[i].ocrResult.push({
-              text:a.raw,value:a.value,is_numeric:true,is_noise:false,
-              confidence:a.confidence,cx_pct:50,cy_pct:50,w_pct:80,h_pct:80,
-              _method:`alt_v${a.variant}`
-            });
-          }
-        });
-      }
     } else {
       // 숫자 인식 실패 → 기존 방식 폴백
       const res2=await fetch(API+'/api/ocr/test-zone',{method:'POST',body:form});
@@ -1368,7 +1392,7 @@ async function saveProfile(){
     created_at:new Date().toISOString(),
     total_items:rules.length,
     detected_items_count:analyzeData?.total_detected||0,
-    _zones:analyzeData?._zones||_zones.map(z=>({x:z.x,y:z.y,w:z.w,h:z.h,name:z.name})),
+    _zones:analyzeData?._zones||_zones.map(z=>({x:z.x,y:z.y,w:z.w,h:z.h,name:z.name,fmt_type:z.fmt_type||'num',fmt_digits:z.fmt_digits||3,fmt_decimal:z.fmt_decimal||false})),
   };
 
   // 서버에 프로필 저장 (QR 포인트가 선택된 경우)
@@ -1527,6 +1551,10 @@ async function submitJudge(){
           const res=await fetch(API+'/api/ocr/multi-zone',{method:'POST',body:form});
           if(!res.ok)continue;
           const data=await res.json();
+          // 포맷 필터 적용
+          if(data.value!=null){
+            data.value=applyFormat(data.value, data.text||'', z);
+          }
           // 해당 영역의 프로필 규칙 매칭
           const matchedRules=profileRules.filter(r=>r.is_numeric);
           let level='ok', reason='';
@@ -1588,6 +1616,48 @@ async function submitJudge(){
     document.getElementById('judging').style.display='none';
     document.getElementById('judgeModeBar').style.display='flex';
     _judgeBlob=null;
+  }
+}
+
+// ═══ 포맷 기반 OCR 필터 ═══
+function applyFormat(value, rawText, zone){
+  const type=zone.fmt_type||'num';
+  const digits=zone.fmt_digits||3;
+  const decimal=zone.fmt_decimal||false;
+
+  if(type==='text'){
+    // 문자 모드: 값 그대로 반환 (OK/NG/PASS/FAIL 등)
+    return value;
+  }
+
+  // 숫자 모드: 자릿수로 필터링
+  // rawText에서 모든 숫자+소수점 추출
+  const allNums=String(value).replace(/[^0-9.]/g,'');
+
+  if(decimal){
+    // 소수점 포함: "XXX.X" 형식
+    // rawText에서 소수점 있는 패턴 우선
+    const dotMatch=rawText.match(/(\d{1,5}\.\d{1,3})/);
+    if(dotMatch)return parseFloat(dotMatch[1]);
+    // 없으면 자릿수로 잘라서 소수점 삽입
+    // 예: digits=3, "4300" → "430" → "43.0"
+    const numStr=allNums.replace('.','');
+    if(numStr.length>digits){
+      const trimmed=numStr.substring(0,digits);
+      // 마지막 1자리를 소수점 아래로
+      return parseFloat(trimmed.slice(0,-1)+'.'+trimmed.slice(-1));
+    }
+    if(numStr.length===digits){
+      return parseFloat(numStr.slice(0,-1)+'.'+numStr.slice(-1));
+    }
+    return parseFloat(numStr)||value;
+  } else {
+    // 정수 모드: 앞에서 N자리만
+    const numStr=allNums.replace('.','');
+    if(numStr.length>digits){
+      return parseFloat(numStr.substring(0,digits));
+    }
+    return parseFloat(numStr)||value;
   }
 }
 

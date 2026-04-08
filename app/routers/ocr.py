@@ -385,6 +385,44 @@ async def test_zone_ocr(
         raise HTTPException(500, f"테스트 실패: {str(e)}")
 
 
+# ── 멀티엔진 영역 OCR (EasyOCR + Tesseract × 다수결) ──
+
+@router.post("/ocr/multi-zone")
+async def multi_engine_zone_ocr(
+    image: UploadFile = File(...),
+    x_pct: float = Form(0), y_pct: float = Form(0),
+    w_pct: float = Form(100), h_pct: float = Form(100),
+):
+    """멀티엔진 OCR — EasyOCR(3) + Tesseract(3) = 6후보 → 다수결"""
+    from app.services.multi_engine_ocr import multi_engine_ocr
+    try:
+        contents = await image.read()
+        nparr = np.frombuffer(contents, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None: raise HTTPException(400, "이미지 디코딩 실패")
+
+        screen, _ = detect_screen(img)
+        h, w = screen.shape[:2]
+        margin_x, margin_y = max(5, int(w*0.01)), max(5, int(h*0.01))
+        x = max(0, int(w*x_pct/100)-margin_x)
+        y = max(0, int(h*y_pct/100)-margin_y)
+        cw = min(w-x, int(w*w_pct/100)+margin_x*2)
+        ch = min(h-y, int(h*h_pct/100)+margin_y*2)
+        cropped = screen[y:y+ch, x:x+cw]
+
+        _, buf = cv2.imencode('.jpg', cropped, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        crop_b64 = base64.b64encode(buf).decode('utf-8')
+
+        reader = smart_ocr._get_reader()
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(_ocr_thread_pool, multi_engine_ocr, reader, cropped)
+        return {"crop_image": crop_b64, **result}
+    except HTTPException: raise
+    except Exception as e:
+        logger.error(f"멀티엔진 OCR 에러: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+
 # ── 고정밀 영역 OCR (3중 전처리 × 다수결) ──
 
 @router.post("/ocr/precision-zone")

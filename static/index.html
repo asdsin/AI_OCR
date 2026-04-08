@@ -1044,8 +1044,8 @@ async function testSingleZone(i){
   form.append('x_pct',z.x);form.append('y_pct',z.y);
   form.append('w_pct',z.w);form.append('h_pct',z.h);
   try{
-    // 고정밀 OCR (3중 전처리 × 다수결)
-    const res=await fetch(API+'/api/ocr/precision-zone',{method:'POST',body:form});
+    // 멀티엔진 OCR (EasyOCR + Tesseract × 다수결)
+    const res=await fetch(API+'/api/ocr/multi-zone',{method:'POST',body:form});
     if(!res.ok)throw new Error(`${res.status}`);
     const data=await res.json();
     // 결과를 기존 형식으로 변환
@@ -1567,43 +1567,63 @@ function showResult(d){
   let ok=0,warn=0,ng=0;
   (d.values||[]).forEach(v=>{if(v.level==='ok')ok++;else if(v.level==='warning')warn++;else ng++});
 
-  let vh=(d.values||[]).map((v,i)=>{
-    const c=v.level==='ok'?'ok':v.level==='warning'?'warning':'ng';
-    return `<div class="vrow" id="vr-${i}">
-      <div class="vnum ${c}">${v.value.toFixed(1)}</div>
-      <div style="flex:1;margin-left:6px">
-        <div style="font-size:11px;color:#94a3b8">${v.rule_name||v.text}</div>
-        <div style="font-size:10px;color:#64748b">${v.reason||''}</div>
+  // 영역별 카드 (사진 + 인식값 + 기준 + 판정)
+  let cards=(d.values||[]).map((v,i)=>{
+    const lv=v.level||'unknown';
+    const lvColor=lv==='ok'?'#22c55e':lv==='warning'?'#f59e0b':'#ef4444';
+    const lvBg=lv==='ok'?'#065f46':lv==='warning'?'#78350f':'#7f1d1d';
+    const lvText={ok:'정상 OK',warning:'경고 WARN',ng:'이상 NG'}[lv]||'미판정';
+    const ruleName=v.rule_name||v.text||'—';
+    const reason=v.reason||'';
+
+    // 기준 정보 파싱
+    let criteria='';
+    if(reason.includes('∈'))criteria=reason;
+    else if(reason.includes('≥')||reason.includes('≤')||reason.includes('>')||reason.includes('<'))criteria=reason;
+    else criteria=reason;
+
+    return `<div style="background:#1e293b;border-radius:8px;overflow:hidden;margin-bottom:6px;border-left:4px solid ${lvColor}">
+      <div style="display:flex;gap:0">
+        ${v._cropImage?`<div style="width:80px;min-height:50px;background:#000;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+          <img src="data:image/jpeg;base64,${v._cropImage}" style="max-width:100%;max-height:60px;object-fit:contain">
+        </div>`:''}
+        <div style="flex:1;padding:8px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <span style="font-size:22px;font-weight:900;color:${lvColor}">${v.value?.toFixed(1)??'—'}</span>
+            <span style="background:${lvBg};color:${lvColor};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">${lvText}</span>
+          </div>
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">📋 ${ruleName}</div>
+          <div style="font-size:10px;color:#64748b">${criteria}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;justify-content:center;padding:4px">
+          <button class="btn-sm bs" onclick="openFix(${i})" style="font-size:10px;padding:4px 6px">✏️</button>
+        </div>
       </div>
-      <span class="badge ${c}" style="font-size:10px" id="vb-${i}">${v.level.toUpperCase()}</span>
-      <button class="btn-sm bs" onclick="openFix(${i})" style="font-size:10px;padding:3px 6px">✏️</button>
     </div>`;
   }).join('');
 
   a.innerHTML=`
-    <div class="card">
+    <div class="card" style="padding:10px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span class="badge ${bc}" style="font-size:14px;padding:5px 12px">${bt}</span>
-        <span style="font-size:11px;color:#94a3b8">${d.total_detected}개 · ${(d.processing_ms/1000).toFixed(1)}초</span>
+        <span class="badge ${bc}" style="font-size:15px;padding:6px 14px">${bt}</span>
+        <div>
+          <div style="font-size:12px;color:#94a3b8">${d.total_detected}개 항목 · ${(d.processing_ms/1000).toFixed(1)}초</div>
+          ${d._path?`<div style="font-size:10px;color:#64748b">📍 ${d._path}</div>`:''}
+        </div>
       </div>
-      ${d._path?`<div style="font-size:11px;color:#64748b;margin-bottom:8px">📍 ${d._path} · ${d._time}</div>`:''}
-      <div class="srow">
+      <div class="srow" style="margin-bottom:0">
         <div class="sbox"><div class="n" style="color:#6ee7b7">${ok}</div><div class="l">정상</div></div>
         <div class="sbox"><div class="n" style="color:#fbbf24">${warn}</div><div class="l">경고</div></div>
         <div class="sbox"><div class="n" style="color:#fca5a5">${ng}</div><div class="l">이상</div></div>
       </div>
-      <div style="max-height:40vh;overflow-y:auto">${vh}</div>
     </div>
-    <div class="card" id="correctionSummary" style="display:none">
-      <div class="card-title">🧠 수정 내역 <span id="corrCount" style="color:#6ee7b7"></span></div>
-      <div id="corrList"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">📝 전체 판정 검증</div>
-      <div style="display:flex;gap:6px">
-        <button class="btn bg" style="flex:1" onclick="verifyResult('ok')">✅ 전체 정확</button>
-        <button class="btn by" style="flex:1" onclick="verifyResult('partial')">⚠️ 일부 오류</button>
-        <button class="btn bd" style="flex:1" onclick="verifyResult('wrong')">❌ 전체 오판정</button>
+    ${cards}
+    <div class="card" style="padding:8px">
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">📝 판정 검증</div>
+      <div style="display:flex;gap:4px">
+        <button class="btn bg" style="flex:1;padding:10px" onclick="verifyResult('ok')">✅ 정확</button>
+        <button class="btn by" style="flex:1;padding:10px" onclick="verifyResult('partial')">⚠️ 일부오류</button>
+        <button class="btn bd" style="flex:1;padding:10px" onclick="verifyResult('wrong')">❌ 오판정</button>
       </div>
     </div>`;
 }

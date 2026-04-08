@@ -1044,10 +1044,39 @@ async function testSingleZone(i){
   form.append('x_pct',z.x);form.append('y_pct',z.y);
   form.append('w_pct',z.w);form.append('h_pct',z.h);
   try{
-    const res=await fetch(API+'/api/ocr/test-zone',{method:'POST',body:form});
+    // 고정밀 OCR (3중 전처리 × 다수결)
+    const res=await fetch(API+'/api/ocr/precision-zone',{method:'POST',body:form});
     if(!res.ok)throw new Error(`${res.status}`);
     const data=await res.json();
-    _zones[i].ocrResult=data.detected_items;_zones[i].cropImage=data.crop_image;
+    // 결과를 기존 형식으로 변환
+    _zones[i].cropImage=data.crop_image;
+    if(data.value!=null){
+      _zones[i].ocrResult=[{
+        text:data.text||String(data.value),
+        value:data.value,
+        is_numeric:true,
+        is_noise:false,
+        confidence:data.confidence,
+        cx_pct:50,cy_pct:50,w_pct:80,h_pct:80,
+        _method:data.method
+      }];
+      // 추가 시도 결과도 표시
+      if(data.all_attempts){
+        data.all_attempts.forEach((a,j)=>{
+          if(a.value!=null&&Math.abs(a.value-data.value)>0.1){
+            _zones[i].ocrResult.push({
+              text:a.raw,value:a.value,is_numeric:true,is_noise:false,
+              confidence:a.confidence,cx_pct:50,cy_pct:50,w_pct:80,h_pct:80,
+              _method:`alt_v${a.variant}`
+            });
+          }
+        });
+      }
+    } else {
+      // 숫자 인식 실패 → 기존 방식 폴백
+      const res2=await fetch(API+'/api/ocr/test-zone',{method:'POST',body:form});
+      if(res2.ok){const d2=await res2.json();_zones[i].ocrResult=d2.detected_items;_zones[i].cropImage=d2.crop_image}
+    }
     renderZones();
   }catch(e){alert('테스트 실패: '+e.message)}
   finally{document.getElementById('zoneTestLoading').style.display='none'}
@@ -1057,15 +1086,7 @@ async function testAllZones(){
   if(!_zones.length||!_refBlob)return;
   document.getElementById('zoneTestLoading').style.display='block';
   for(let i=0;i<_zones.length;i++){
-    const z=_zones[i];
-    const form=new FormData();form.append('image',_refBlob);
-    form.append('x_pct',z.x);form.append('y_pct',z.y);
-    form.append('w_pct',z.w);form.append('h_pct',z.h);
-    try{
-      const res=await fetch(API+'/api/ocr/test-zone',{method:'POST',body:form});
-      if(res.ok){const data=await res.json();_zones[i].ocrResult=data.detected_items}
-    }catch(e){}
-    renderZones();
+    await testSingleZone(i);
   }
   document.getElementById('zoneTestLoading').style.display='none';
 }

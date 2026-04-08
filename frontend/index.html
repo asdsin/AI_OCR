@@ -6,166 +6,451 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.json">
 <title>AI 인식 PoC v2</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
-/* ── 리셋 + 기본 ── */
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;font-size:14px}
 
-/* ── 헤더 ── */
-.header{background:#1e293b;padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #334155;position:sticky;top:0;z-index:10}
-.header h1{font-size:17px;font-weight:700;flex:1}
-.status{font-size:11px;padding:4px 10px;border-radius:12px}
-.status.on{background:#065f46;color:#6ee7b7}
-.status.off{background:#7f1d1d;color:#fca5a5}
+.hdr{background:#1e293b;padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #334155;position:sticky;top:0;z-index:10}
+.hdr h1{font-size:16px;font-weight:700;flex:1}
+.st{font-size:11px;padding:3px 8px;border-radius:10px}
+.st.on{background:#065f46;color:#6ee7b7}.st.off{background:#7f1d1d;color:#fca5a5}
 
-/* ── 메인 컨텐츠 ── */
-.main{padding:16px}
-.card{background:#1e293b;border-radius:10px;padding:14px;margin-bottom:12px}
+.main{padding:12px;max-width:500px;margin:0 auto}
+.card{background:#1e293b;border-radius:10px;padding:12px;margin-bottom:10px}
 .card-title{font-size:13px;font-weight:700;color:#94a3b8;margin-bottom:8px}
 
-/* ── 버튼 ── */
 .btn{display:block;width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;text-align:center;margin-bottom:6px}
-.btn-primary{background:#3b82f6;color:#fff}
-.btn-secondary{background:#334155;color:#e2e8f0}
+.btn-p{background:#3b82f6;color:#fff}.btn-p:active{background:#2563eb}
+.btn-g{background:#059669;color:#fff}
+.btn-s{background:#334155;color:#e2e8f0}
+.btn-d{background:#ef4444;color:#fff}
+.btn:disabled{opacity:.4}
 
-/* ── 상태 메시지 ── */
-.info-box{background:#0f172a;border-radius:6px;padding:10px;font-size:12px;color:#94a3b8}
+.tmpl-card{background:#0f172a;border-radius:8px;padding:10px;margin-bottom:6px;cursor:pointer;border-left:3px solid #3b82f6;transition:all .15s}
+.tmpl-card:active{background:#1e3a5f}
+.tmpl-card .name{font-weight:700;font-size:14px}.tmpl-card .info{font-size:11px;color:#64748b}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}
+.badge-num{background:#065f46;color:#6ee7b7}.badge-sig{background:#78350f;color:#fbbf24}.badge-col{background:#1e3a5f;color:#60a5fa}
+
+.screen{display:none}.screen.active{display:block}
+
+.cam-wrap{position:relative;width:100%;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden;margin-bottom:8px}
+.cam-wrap video,.cam-wrap canvas,.cam-wrap img{width:100%;height:100%;object-fit:contain}
+
+#qr-reader{width:100%;border-radius:10px;overflow:hidden;margin-bottom:8px}
+#qr-reader video{border-radius:10px}
+
+.roi-canvas{position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;touch-action:none}
+
+.equip-info{background:#0f172a;border-radius:6px;padding:10px;margin-bottom:8px}
+.equip-info .name{font-size:16px;font-weight:700;margin-bottom:4px}
+.equip-info .meta{font-size:11px;color:#64748b}
 </style>
 </head>
 <body>
 
-<!-- ═══ 헤더 ═══ -->
-<div class="header">
-  <span style="font-size:22px">🏭</span>
+<div class="hdr">
+  <span style="font-size:20px">🏭</span>
   <h1>AI 인식 PoC v2</h1>
-  <span id="statusBadge" class="status off">연결 중...</span>
+  <span id="stBadge" class="st off">...</span>
 </div>
 
-<!-- ═══ 메인 ═══ -->
 <div class="main">
-  <!-- 서버 상태 카드 -->
-  <div class="card">
-    <div class="card-title">📡 서버 상태</div>
-    <div class="info-box" id="serverInfo">서버에 연결 중...</div>
+  <!-- ═══ Screen 1: QR 스캔 ═══ -->
+  <div id="s-qr" class="screen active">
+    <div class="card">
+      <div class="card-title">🏷️ QR 스캔</div>
+      <div id="qr-reader"></div>
+      <div style="text-align:center;margin:8px 0">
+        <span style="color:#64748b;font-size:12px">또는</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <input id="qrInput" placeholder="QR값 직접 입력..." style="flex:1;padding:10px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:14px">
+        <button class="btn btn-p" style="width:auto;padding:10px 16px" onclick="lookupQr()">조회</button>
+      </div>
+      <div id="qrError" style="display:none;margin-top:8px;padding:8px;background:#7f1d1d;border-radius:6px;color:#fca5a5;font-size:12px"></div>
+    </div>
   </div>
 
-  <!-- 앱 상태 카드 (디버그용, 추후 제거) -->
-  <div class="card">
-    <div class="card-title">🔧 앱 상태</div>
-    <div class="info-box" id="appStateInfo">초기화 중...</div>
+  <!-- ═══ Screen 2: 설비 정보 + 템플릿 선택 ═══ -->
+  <div id="s-equip" class="screen">
+    <div class="card">
+      <div class="equip-info" id="equipInfo"></div>
+      <div class="card-title">📋 검사 항목 선택</div>
+      <div id="tmplList"></div>
+    </div>
+    <button class="btn btn-s" onclick="goScreen('s-qr');stopCamera()">← QR 다시 스캔</button>
   </div>
 
-  <!-- Phase 2에서 추가될 영역 -->
-  <div id="content"></div>
+  <!-- ═══ Screen 3: 카메라 촬영 ═══ -->
+  <div id="s-camera" class="screen">
+    <div class="card">
+      <div class="card-title">📸 PLC 화면 촬영</div>
+      <div id="ruleInfo" style="font-size:12px;color:#94a3b8;margin-bottom:6px"></div>
+      <div class="cam-wrap" id="camWrap">
+        <video id="camVideo" autoplay playsinline muted></video>
+      </div>
+      <button class="btn btn-d" id="btnCapture" onclick="captureImage()">📸 촬영</button>
+    </div>
+    <button class="btn btn-s" onclick="goScreen('s-equip');stopCamera()">← 항목 선택으로</button>
+  </div>
+
+  <!-- ═══ Screen 4: 촬영 확인 + ROI 지정 ═══ -->
+  <div id="s-roi" class="screen">
+    <div class="card">
+      <div class="card-title">🔲 판독 영역(ROI) 확인</div>
+      <div id="roiRuleInfo" style="font-size:12px;color:#94a3b8;margin-bottom:6px"></div>
+      <div class="cam-wrap" id="roiWrap" style="cursor:crosshair">
+        <canvas id="roiCanvas"></canvas>
+        <canvas id="roiOverlay" class="roi-canvas"></canvas>
+      </div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:6px" id="roiCoords">ROI: 드래그로 영역을 지정하세요</div>
+      <button class="btn btn-g" id="btnJudge" onclick="startJudgment()" disabled>🔍 판정 시작</button>
+      <button class="btn btn-s" onclick="retakeImage()">↩️ 재촬영</button>
+    </div>
+  </div>
+
+  <!-- ═══ Screen 5: 판정 결과 (Phase 5에서 구현) ═══ -->
+  <div id="s-result" class="screen">
+    <div class="card">
+      <div class="card-title">📊 판정 결과</div>
+      <div id="resultContent" style="text-align:center;padding:20px;color:#64748b">Phase 5에서 구현 예정</div>
+    </div>
+    <button class="btn btn-p" onclick="goScreen('s-camera');startCamera()">📸 재촬영</button>
+    <button class="btn btn-s" onclick="goScreen('s-equip')">← 항목 선택으로</button>
+    <button class="btn btn-s" onclick="goScreen('s-qr')">← QR 다시 스캔</button>
+  </div>
 </div>
 
 <script>
-// ═══════════════════════════════════════════
-// 앱 상태 객체 — 전체 흐름에서 공유
-// ═══════════════════════════════════════════
+// ═══ 앱 상태 ═══
 const appState = {
-  equipment: null,         // 선택된 설비 정보
-  selectedTemplate: null,  // 선택된 검사 템플릿 (ROI 포함)
-  selectedRule: null,      // 선택된 판정 규칙
-  capturedImage: null,     // 촬영된 이미지 (Blob)
-  roi: null,               // ROI 좌표 {x, y, w, h}
-  judgmentType: null,       // 판정 타입 (numeric/signal/color)
-  ocrResult: null,          // OCR 결과
-  judgmentResult: null,     // 판정 결과 (ok/ng/warning)
+  equipment: null,
+  selectedTemplate: null,
+  selectedRule: null,
+  capturedImage: null,  // base64
+  roi: null,            // {x, y, w, h} (% 단위)
+  judgmentType: null,
+  ocrResult: null,
+  judgmentResult: null,
 };
 
-// ═══════════════════════════════════════════
-// API 호출 유틸 함수
-// ═══════════════════════════════════════════
-const API_BASE = location.origin;  // 같은 서버에서 서빙 시
+const API = location.origin;
 
-/**
- * API 호출 공통 함수
- * @param {string} path - API 경로 (예: '/health')
- * @param {object} options - fetch 옵션
- * @returns {Promise<object>} JSON 응답
- */
-async function apiCall(path, options = {}) {
-  try {
-    const url = API_BASE + path;
-    const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json', ...options.headers },
-      ...options,
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`${res.status}: ${text.slice(0, 200)}`);
-    }
-    return await res.json();
-  } catch (e) {
-    console.error(`API 에러 [${path}]:`, e);
-    throw e;
-  }
+// ═══ API 유틸 ═══
+async function apiCall(path, opts = {}) {
+  const res = await fetch(API + path, { headers: {'Content-Type':'application/json'}, ...opts });
+  if (!res.ok) { const t = await res.text(); throw new Error(`${res.status}: ${t.slice(0,200)}`); }
+  return res.json();
 }
 
-/**
- * 파일 업로드용 API 호출 (FormData)
- * @param {string} path - API 경로
- * @param {FormData} formData - 업로드 데이터
- * @returns {Promise<object>} JSON 응답
- */
-async function apiUpload(path, formData) {
-  try {
-    const url = API_BASE + path;
-    const res = await fetch(url, { method: 'POST', body: formData });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`${res.status}: ${text.slice(0, 200)}`);
-    }
-    return await res.json();
-  } catch (e) {
-    console.error(`업로드 에러 [${path}]:`, e);
-    throw e;
-  }
+// ═══ 화면 전환 ═══
+function goScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
 }
 
-// ═══════════════════════════════════════════
-// 서버 연결 확인
-// ═══════════════════════════════════════════
+// ═══ 서버 연결 확인 ═══
 async function checkServer() {
-  const badge = document.getElementById('statusBadge');
-  const info = document.getElementById('serverInfo');
+  const b = document.getElementById('stBadge');
   try {
-    const data = await apiCall('/health');
-    badge.textContent = '연결됨';
-    badge.className = 'status on';
-    info.innerHTML = `✅ ${data.message}<br>버전: ${data.version}`;
-  } catch (e) {
-    badge.textContent = '연결 실패';
-    badge.className = 'status off';
-    info.innerHTML = `❌ 서버 연결 실패<br>${e.message}<br><br>
-      <button class="btn btn-secondary" onclick="checkServer()" style="width:auto;display:inline-block;padding:6px 12px;font-size:12px">재시도</button>`;
+    await apiCall('/health');
+    b.textContent = '연결됨'; b.className = 'st on';
+  } catch(e) {
+    b.textContent = '연결실패'; b.className = 'st off';
   }
 }
 
-// ═══════════════════════════════════════════
-// 앱 상태 표시 (디버그용)
-// ═══════════════════════════════════════════
-function renderAppState() {
-  const el = document.getElementById('appStateInfo');
-  const entries = Object.entries(appState)
-    .map(([k, v]) => `<span style="color:#64748b">${k}:</span> ${v === null ? '<span style="color:#475569">null</span>' : `<span style="color:#6ee7b7">${typeof v === 'object' ? 'Object' : v}</span>`}`)
-    .join('<br>');
-  el.innerHTML = entries;
+// ═══════════════════════════════════
+// Screen 1: QR 스캔
+// ═══════════════════════════════════
+let qrScanner = null;
+
+function initQrScanner() {
+  qrScanner = new Html5Qrcode("qr-reader");
+  qrScanner.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: { width: 200, height: 200 } },
+    onQrSuccess,
+    () => {} // ignore errors
+  ).catch(e => {
+    console.log('QR 카메라 실패:', e);
+    document.getElementById('qr-reader').innerHTML =
+      '<div style="padding:20px;text-align:center;color:#64748b;font-size:12px">카메라 사용 불가 — QR값을 직접 입력하세요</div>';
+  });
 }
 
-// ═══════════════════════════════════════════
-// PWA 서비스워커 등록
-// ═══════════════════════════════════════════
+function onQrSuccess(qrValue) {
+  if (qrScanner) qrScanner.stop().catch(() => {});
+  document.getElementById('qrInput').value = qrValue;
+  lookupQr();
+}
+
+async function lookupQr() {
+  const qr = document.getElementById('qrInput').value.trim();
+  if (!qr) return;
+  const errEl = document.getElementById('qrError');
+  errEl.style.display = 'none';
+  try {
+    const data = await apiCall(`/equipments/by-qr/${encodeURIComponent(qr)}`);
+    appState.equipment = data;
+    showEquipment(data);
+    if (qrScanner) qrScanner.stop().catch(() => {});
+    goScreen('s-equip');
+  } catch(e) {
+    errEl.style.display = 'block';
+    errEl.textContent = e.message.includes('404')
+      ? `등록되지 않은 설비입니다 (QR: ${qr})`
+      : `조회 실패: ${e.message}`;
+  }
+}
+
+// ═══════════════════════════════════
+// Screen 2: 설비 정보 + 템플릿 선택
+// ═══════════════════════════════════
+function showEquipment(eq) {
+  document.getElementById('equipInfo').innerHTML = `
+    <div class="name">${eq.equipment_name}</div>
+    <div class="meta">${eq.equipment_code} · ${eq.line_name || ''} · ${eq.location_name || ''} · QR: ${eq.qr_value || ''}</div>`;
+
+  const list = document.getElementById('tmplList');
+  if (!eq.templates || !eq.templates.length) {
+    list.innerHTML = '<div style="color:#64748b;padding:10px;text-align:center">등록된 검사 항목이 없습니다</div>';
+    return;
+  }
+  list.innerHTML = eq.templates.map(t => {
+    const bc = t.judgment_type === 'numeric' ? 'badge-num' : t.judgment_type === 'signal' ? 'badge-sig' : 'badge-col';
+    const bt = {numeric:'수치형', signal:'신호형', color:'색상형'}[t.judgment_type] || t.judgment_type;
+    return `<div class="tmpl-card" onclick="selectTemplate(${t.id})">
+      <div class="name">${t.template_name} <span class="badge ${bc}">${bt}</span></div>
+      <div class="info">ROI: (${t.roi_x}%, ${t.roi_y}%) ${t.roi_width}%×${t.roi_height}%</div>
+    </div>`;
+  }).join('');
+}
+
+async function selectTemplate(tmplId) {
+  const eq = appState.equipment;
+  const tmpl = eq.templates.find(t => t.id === tmplId);
+  if (!tmpl) return;
+  appState.selectedTemplate = tmpl;
+  appState.judgmentType = tmpl.judgment_type;
+
+  // 규칙 로딩
+  try {
+    const rules = await apiCall(`/rules/by-template/${tmplId}`);
+    appState.selectedRule = rules.length > 0 ? rules[0] : null;
+  } catch(e) {
+    appState.selectedRule = null;
+  }
+
+  showRuleInfo();
+  goScreen('s-camera');
+  startCamera();
+}
+
+function showRuleInfo() {
+  const tmpl = appState.selectedTemplate;
+  const rule = appState.selectedRule;
+  const bt = {numeric:'수치형', signal:'신호형', color:'색상형'}[tmpl.judgment_type];
+  let ruleText = '규칙 없음';
+  if (rule) {
+    if (rule.judgment_type === 'numeric') ruleText = `${rule.min_value}~${rule.max_value} ${rule.unit || ''}`;
+    else if (rule.judgment_type === 'signal') ruleText = `ON≥${rule.signal_on_threshold}, OFF≤${rule.signal_off_threshold}`;
+    else if (rule.judgment_type === 'color') ruleText = rule.color_mapping_json || '';
+  }
+  const html = `📋 ${tmpl.template_name} (${bt}) · 기준: ${ruleText}`;
+  document.getElementById('ruleInfo').innerHTML = html;
+  document.getElementById('roiRuleInfo').innerHTML = html;
+}
+
+// ═══════════════════════════════════
+// Screen 3: 카메라 촬영
+// ═══════════════════════════════════
+let camStream = null;
+
+async function startCamera() {
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    const video = document.getElementById('camVideo');
+    video.srcObject = camStream;
+    await video.play();
+  } catch(e) {
+    alert('카메라 접근 실패: ' + e.message);
+  }
+}
+
+function stopCamera() {
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+}
+
+function captureImage() {
+  const video = document.getElementById('camVideo');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  appState.capturedImage = canvas.toDataURL('image/jpeg', 0.9);
+  stopCamera();
+  showRoiScreen();
+  goScreen('s-roi');
+}
+
+function retakeImage() {
+  appState.capturedImage = null;
+  appState.roi = null;
+  goScreen('s-camera');
+  startCamera();
+}
+
+// ═══════════════════════════════════
+// Screen 4: ROI 지정
+// ═══════════════════════════════════
+let _roiDragging = false, _roiStart = {}, _roiRect = null;
+
+function showRoiScreen() {
+  const img = new Image();
+  img.onload = function() {
+    const canvas = document.getElementById('roiCanvas');
+    const overlay = document.getElementById('roiOverlay');
+    const wrap = document.getElementById('roiWrap');
+
+    // 캔버스 크기를 이미지 비율에 맞게
+    canvas.width = img.width;
+    canvas.height = img.height;
+    overlay.width = img.width;
+    overlay.height = img.height;
+
+    // 이미지 그리기
+    canvas.getContext('2d').drawImage(img, 0, 0);
+
+    // 템플릿에 ROI가 있으면 자동 표시
+    const tmpl = appState.selectedTemplate;
+    if (tmpl && tmpl.roi_x > 0) {
+      _roiRect = {
+        x: tmpl.roi_x / 100 * img.width,
+        y: tmpl.roi_y / 100 * img.height,
+        w: tmpl.roi_width / 100 * img.width,
+        h: tmpl.roi_height / 100 * img.height,
+      };
+      drawRoi();
+      saveRoiToState();
+    } else {
+      _roiRect = null;
+      document.getElementById('btnJudge').disabled = true;
+    }
+
+    // 드래그 이벤트
+    setupRoiDrag(overlay);
+  };
+  img.src = appState.capturedImage;
+}
+
+function setupRoiDrag(overlay) {
+  function getPos(e) {
+    const rect = overlay.getBoundingClientRect();
+    const touch = e.touches ? e.touches[0] : e;
+    return {
+      x: (touch.clientX - rect.left) / rect.width * overlay.width,
+      y: (touch.clientY - rect.top) / rect.height * overlay.height
+    };
+  }
+
+  overlay.onpointerdown = function(e) {
+    _roiDragging = true;
+    _roiStart = getPos(e);
+    _roiRect = null;
+    e.preventDefault();
+  };
+  overlay.onpointermove = function(e) {
+    if (!_roiDragging) return;
+    const cur = getPos(e);
+    _roiRect = {
+      x: Math.min(_roiStart.x, cur.x),
+      y: Math.min(_roiStart.y, cur.y),
+      w: Math.abs(cur.x - _roiStart.x),
+      h: Math.abs(cur.y - _roiStart.y),
+    };
+    drawRoi();
+  };
+  overlay.onpointerup = function() {
+    _roiDragging = false;
+    if (_roiRect && _roiRect.w > 10 && _roiRect.h > 10) {
+      saveRoiToState();
+    }
+  };
+}
+
+function drawRoi() {
+  const overlay = document.getElementById('roiOverlay');
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  if (!_roiRect) return;
+
+  // 반투명 마스크
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(0, 0, overlay.width, overlay.height);
+  // ROI 영역은 투명하게
+  ctx.clearRect(_roiRect.x, _roiRect.y, _roiRect.w, _roiRect.h);
+  // 빨간 테두리
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(_roiRect.x, _roiRect.y, _roiRect.w, _roiRect.h);
+  // 모서리 점
+  ctx.fillStyle = '#ef4444';
+  const corners = [
+    [_roiRect.x, _roiRect.y],
+    [_roiRect.x + _roiRect.w, _roiRect.y],
+    [_roiRect.x, _roiRect.y + _roiRect.h],
+    [_roiRect.x + _roiRect.w, _roiRect.y + _roiRect.h],
+  ];
+  corners.forEach(([cx, cy]) => {
+    ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI*2); ctx.fill();
+  });
+}
+
+function saveRoiToState() {
+  const canvas = document.getElementById('roiCanvas');
+  appState.roi = {
+    x: Math.round(_roiRect.x / canvas.width * 1000) / 10,
+    y: Math.round(_roiRect.y / canvas.height * 1000) / 10,
+    w: Math.round(_roiRect.w / canvas.width * 1000) / 10,
+    h: Math.round(_roiRect.h / canvas.height * 1000) / 10,
+  };
+  document.getElementById('roiCoords').textContent =
+    `ROI: X=${appState.roi.x}% Y=${appState.roi.y}% W=${appState.roi.w}% H=${appState.roi.h}%`;
+  document.getElementById('btnJudge').disabled = false;
+}
+
+// ═══════════════════════════════════
+// 판정 시작 (Phase 5에서 구현)
+// ═══════════════════════════════════
+function startJudgment() {
+  // Phase 5에서 OCR + 판정 로직 구현
+  document.getElementById('resultContent').innerHTML = `
+    <div style="text-align:left;font-size:12px">
+      <b>appState 확인:</b><br>
+      설비: ${appState.equipment?.equipment_name}<br>
+      템플릿: ${appState.selectedTemplate?.template_name}<br>
+      판정타입: ${appState.judgmentType}<br>
+      규칙: ${appState.selectedRule ? JSON.stringify({min:appState.selectedRule.min_value, max:appState.selectedRule.max_value, unit:appState.selectedRule.unit}) : 'null'}<br>
+      ROI: ${JSON.stringify(appState.roi)}<br>
+      이미지: ${appState.capturedImage ? '있음 (' + Math.round(appState.capturedImage.length/1024) + 'KB)' : '없음'}
+    </div>`;
+  goScreen('s-result');
+}
+
+// ═══ PWA 서비스워커 ═══
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(e => console.log('SW 등록 실패:', e));
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-// ═══════════════════════════════════════════
-// 초기화
-// ═══════════════════════════════════════════
+// ═══ 초기화 ═══
 checkServer();
-renderAppState();
+initQrScanner();
 </script>
 </body>
 </html>

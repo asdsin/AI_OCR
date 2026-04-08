@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.db import init_db, DB_PATH
+from app.routers import equipment, template, rule
 
 # ── 로깅 설정 ──
 logging.basicConfig(
@@ -76,6 +77,12 @@ async def root():
     """루트 접속 시 프론트엔드로 이동"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/app/index.html")
+
+
+# ── 라우터 등록 ──
+app.include_router(equipment.router)
+app.include_router(template.router)
+app.include_router(rule.router)
 
 
 # ── 헬스체크 엔드포인트 ──

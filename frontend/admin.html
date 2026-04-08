@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 인식 PoC v2 — 관리자</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Malgun Gothic',sans-serif;background:#f1f5f9;color:#1e293b;font-size:14px}
+.hdr{background:#1e293b;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px}
+.hdr h1{font-size:18px;font-weight:700;flex:1}
+.hdr a{color:#94a3b8;text-decoration:none;font-size:13px}
+
+.tabs{display:flex;background:#fff;border-bottom:2px solid #e2e8f0;padding:0 24px}
+.tab{padding:12px 20px;cursor:pointer;font-size:13px;font-weight:600;color:#64748b;border-bottom:2px solid transparent;margin-bottom:-2px}
+.tab.active{color:#3b82f6;border-bottom-color:#3b82f6}
+
+.content{max-width:1200px;margin:0 auto;padding:20px}
+.panel{display:none}.panel.active{display:block}
+
+.card{background:#fff;border-radius:8px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.card h3{font-size:15px;margin-bottom:12px;color:#334155}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f8fafc;padding:8px 10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600}
+td{padding:8px 10px;border-bottom:1px solid #f1f5f9}
+tr:hover{background:#f8fafc}
+
+.form-row{display:flex;gap:8px;margin-bottom:8px;align-items:end;flex-wrap:wrap}
+.form-group{display:flex;flex-direction:column;gap:2px}
+.form-group label{font-size:11px;color:#64748b;font-weight:600}
+.form-group input,.form-group select,.form-group textarea{padding:6px 10px;border:1px solid #cbd5e1;border-radius:4px;font-size:13px}
+
+.btn{padding:8px 16px;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer}
+.btn-p{background:#3b82f6;color:#fff}.btn-d{background:#ef4444;color:#fff}
+.btn-s{background:#e2e8f0;color:#334155}.btn-g{background:#059669;color:#fff}
+.btn-sm{padding:4px 10px;font-size:12px}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}
+.badge-ok{background:#dcfce7;color:#166534}.badge-ng{background:#fee2e2;color:#991b1b}
+.badge-err{background:#fef3c7;color:#92400e}.badge-corr{background:#dbeafe;color:#1e40af}
+
+.stat-row{display:flex;gap:12px;margin-bottom:16px}
+.stat-box{flex:1;background:#fff;border-radius:8px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.stat-box .num{font-size:28px;font-weight:800}.stat-box .label{font-size:11px;color:#64748b}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>🏭 AI 인식 PoC v2 — 관리자</h1>
+  <a href="/app/index.html">← 현장 화면</a>
+  <span id="stBadge" style="font-size:11px;padding:3px 8px;border-radius:10px;background:#065f46;color:#6ee7b7">연결됨</span>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('equip')">설비</div>
+  <div class="tab" onclick="switchTab('tmpl')">템플릿</div>
+  <div class="tab" onclick="switchTab('rule')">규칙</div>
+  <div class="tab" onclick="switchTab('result')">결과</div>
+  <div class="tab" onclick="switchTab('corr')">보정 이력</div>
+</div>
+
+<div class="content">
+
+<!-- ═══ 1. 설비 관리 ═══ -->
+<div id="p-equip" class="panel active">
+  <div class="card">
+    <h3>설비 등록</h3>
+    <div class="form-row">
+      <div class="form-group"><label>설비코드</label><input id="eq-code" placeholder="EQ-001"></div>
+      <div class="form-group"><label>설비명</label><input id="eq-name" placeholder="건조기 1호기"></div>
+      <div class="form-group"><label>라인명</label><input id="eq-line" placeholder="A라인"></div>
+      <div class="form-group"><label>위치</label><input id="eq-loc" placeholder="1공정"></div>
+      <div class="form-group"><label>QR값</label><input id="eq-qr" placeholder="EQ001"></div>
+      <button class="btn btn-p" onclick="addEquip()">등록</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>설비 목록</h3>
+    <table><thead><tr><th>ID</th><th>코드</th><th>설비명</th><th>라인</th><th>위치</th><th>QR</th><th>상태</th><th>작업</th></tr></thead>
+    <tbody id="equipTable"></tbody></table>
+  </div>
+</div>
+
+<!-- ═══ 2. 템플릿 관리 ═══ -->
+<div id="p-tmpl" class="panel">
+  <div class="card">
+    <h3>템플릿 등록</h3>
+    <div class="form-row">
+      <div class="form-group"><label>설비</label><select id="tmpl-equip"></select></div>
+      <div class="form-group"><label>템플릿명</label><input id="tmpl-name" placeholder="온도 표시부"></div>
+      <div class="form-group"><label>판정타입</label><select id="tmpl-type"><option value="numeric">수치형</option><option value="signal">신호형</option><option value="color">색상형</option></select></div>
+      <div class="form-group"><label>ROI X%</label><input id="tmpl-x" type="number" value="0" style="width:60px"></div>
+      <div class="form-group"><label>Y%</label><input id="tmpl-y" type="number" value="0" style="width:60px"></div>
+      <div class="form-group"><label>W%</label><input id="tmpl-w" type="number" value="100" style="width:60px"></div>
+      <div class="form-group"><label>H%</label><input id="tmpl-h" type="number" value="100" style="width:60px"></div>
+      <button class="btn btn-p" onclick="addTmpl()">등록</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>템플릿 목록</h3>
+    <div class="form-row"><div class="form-group"><label>설비 필터</label><select id="tmpl-filter" onchange="loadTmpls()"><option value="">전체</option></select></div></div>
+    <table><thead><tr><th>ID</th><th>설비ID</th><th>템플릿명</th><th>타입</th><th>ROI</th><th>전처리</th></tr></thead>
+    <tbody id="tmplTable"></tbody></table>
+  </div>
+</div>
+
+<!-- ═══ 3. 규칙 관리 ═══ -->
+<div id="p-rule" class="panel">
+  <div class="card">
+    <h3>규칙 등록</h3>
+    <div class="form-row">
+      <div class="form-group"><label>설비</label><select id="rule-equip" onchange="loadRuleTemplates()"></select></div>
+      <div class="form-group"><label>템플릿</label><select id="rule-tmpl"></select></div>
+      <div class="form-group"><label>타입</label><select id="rule-type" onchange="toggleRuleFields()"><option value="numeric">수치형</option><option value="signal">신호형</option><option value="color">색상형</option></select></div>
+    </div>
+    <div id="ruleNumFields" class="form-row">
+      <div class="form-group"><label>최소값</label><input id="rule-min" type="number" step="0.1"></div>
+      <div class="form-group"><label>최대값</label><input id="rule-max" type="number" step="0.1"></div>
+      <div class="form-group"><label>단위</label><input id="rule-unit" placeholder="℃"></div>
+    </div>
+    <div id="ruleSigFields" class="form-row" style="display:none">
+      <div class="form-group"><label>ON 밝기</label><input id="rule-on" type="number" value="150"></div>
+      <div class="form-group"><label>OFF 밝기</label><input id="rule-off" type="number" value="50"></div>
+      <div class="form-group"><label>OK 텍스트</label><input id="rule-text" placeholder="ON,RUN"></div>
+    </div>
+    <div id="ruleColFields" class="form-row" style="display:none">
+      <div class="form-group" style="flex:1"><label>색상 매핑 JSON</label><textarea id="rule-color" rows="2" style="width:100%">{"green":"가동","red":"정지","blue":"대기"}</textarea></div>
+    </div>
+    <button class="btn btn-p" onclick="addRule()">등록</button>
+  </div>
+  <div class="card">
+    <h3>규칙 목록</h3>
+    <table><thead><tr><th>ID</th><th>설비</th><th>템플릿</th><th>타입</th><th>기준</th><th>단위</th></tr></thead>
+    <tbody id="ruleTable"></tbody></table>
+  </div>
+</div>
+
+<!-- ═══ 4. 결과 조회 ═══ -->
+<div id="p-result" class="panel">
+  <div class="card">
+    <h3>판정 결과</h3>
+    <div class="form-row">
+      <div class="form-group"><label>설비</label><select id="res-equip" onchange="loadResults()"><option value="">전체</option></select></div>
+      <div class="form-group"><label>날짜</label><input id="res-date" type="date" onchange="loadResults()"></div>
+      <div class="form-group"><label>결과</label><select id="res-filter" onchange="loadResults()"><option value="">전체</option><option value="OK">OK</option><option value="NG">NG</option></select></div>
+    </div>
+    <table><thead><tr><th>ID</th><th>타입</th><th>원문</th><th>값</th><th>결과</th><th>신뢰도</th><th>보정</th><th>시간</th></tr></thead>
+    <tbody id="resultTable"></tbody></table>
+  </div>
+</div>
+
+<!-- ═══ 5. 보정 이력 ═══ -->
+<div id="p-corr" class="panel">
+  <div class="stat-row" id="corrStats"></div>
+  <div class="card">
+    <h3>보정 이력</h3>
+    <table><thead><tr><th>ID</th><th>결과ID</th><th>이전</th><th>보정</th><th>값</th><th>사유</th><th>시간</th></tr></thead>
+    <tbody id="corrTable"></tbody></table>
+  </div>
+</div>
+
+</div>
+
+<script>
+const API = location.origin;
+async function api(path, opts={}){
+  const r=await fetch(API+path,{headers:{'Content-Type':'application/json'},...opts});
+  if(!r.ok){const t=await r.text();throw new Error(t.slice(0,200));}
+  return r.json();
+}
+
+function switchTab(id){
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    const names=['equip','tmpl','rule','result','corr'];
+    t.classList.toggle('active',names[i]===id);
+  });
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('p-'+id).classList.add('active');
+  if(id==='equip')loadEquips();
+  if(id==='tmpl')loadTmpls();
+  if(id==='rule')loadRules();
+  if(id==='result')loadResults();
+  if(id==='corr')loadCorrs();
+}
+
+// ═══ 설비 ═══
+async function loadEquips(){
+  const data=await api('/equipments');
+  document.getElementById('equipTable').innerHTML=data.map(e=>`<tr>
+    <td>${e.id}</td><td>${e.equipment_code}</td><td>${e.equipment_name}</td>
+    <td>${e.line_name||''}</td><td>${e.location_name||''}</td><td>${e.qr_value||''}</td>
+    <td>${e.is_active?'<span class="badge badge-ok">활성</span>':'<span class="badge badge-ng">비활성</span>'}</td>
+    <td><button class="btn btn-d btn-sm" onclick="delEquip(${e.id})">비활성화</button></td>
+  </tr>`).join('');
+  // 다른 탭 드롭다운 갱신
+  ['tmpl-equip','tmpl-filter','rule-equip','res-equip'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(!sel)return;
+    const hasAll=sel.querySelector('option[value=""]');
+    sel.innerHTML=(hasAll?'<option value="">전체</option>':'')+data.map(e=>`<option value="${e.id}">${e.equipment_name}</option>`).join('');
+  });
+}
+async function addEquip(){
+  await api('/equipments',{method:'POST',body:JSON.stringify({
+    equipment_code:document.getElementById('eq-code').value,
+    equipment_name:document.getElementById('eq-name').value,
+    line_name:document.getElementById('eq-line').value,
+    location_name:document.getElementById('eq-loc').value,
+    qr_value:document.getElementById('eq-qr').value,
+  })});
+  loadEquips();
+}
+async function delEquip(id){await api(`/equipments/${id}`,{method:'DELETE'});loadEquips();}
+
+// ═══ 템플릿 ═══
+async function loadTmpls(){
+  const eqId=document.getElementById('tmpl-filter')?.value;
+  const url=eqId?`/templates/by-equipment/${eqId}`:'/templates';
+  const data=await api(url);
+  document.getElementById('tmplTable').innerHTML=data.map(t=>`<tr>
+    <td>${t.id}</td><td>${t.equipment_id}</td><td>${t.template_name}</td>
+    <td><span class="badge badge-ok">${t.judgment_type}</span></td>
+    <td>(${t.roi_x},${t.roi_y}) ${t.roi_width}x${t.roi_height}</td>
+    <td>${t.preprocess_type||'-'}</td>
+  </tr>`).join('');
+}
+async function addTmpl(){
+  await api('/templates',{method:'POST',body:JSON.stringify({
+    equipment_id:+document.getElementById('tmpl-equip').value,
+    template_name:document.getElementById('tmpl-name').value,
+    judgment_type:document.getElementById('tmpl-type').value,
+    roi_x:+document.getElementById('tmpl-x').value,
+    roi_y:+document.getElementById('tmpl-y').value,
+    roi_width:+document.getElementById('tmpl-w').value,
+    roi_height:+document.getElementById('tmpl-h').value,
+  })});
+  loadTmpls();
+}
+
+// ═══ 규칙 ═══
+function toggleRuleFields(){
+  const t=document.getElementById('rule-type').value;
+  document.getElementById('ruleNumFields').style.display=t==='numeric'?'flex':'none';
+  document.getElementById('ruleSigFields').style.display=t==='signal'?'flex':'none';
+  document.getElementById('ruleColFields').style.display=t==='color'?'flex':'none';
+}
+async function loadRuleTemplates(){
+  const eqId=document.getElementById('rule-equip').value;
+  if(!eqId)return;
+  const data=await api(`/templates/by-equipment/${eqId}`);
+  document.getElementById('rule-tmpl').innerHTML=data.map(t=>`<option value="${t.id}">${t.template_name}</option>`).join('');
+}
+async function loadRules(){
+  const data=await api('/rules');
+  document.getElementById('ruleTable').innerHTML=data.map(r=>{
+    let criteria='';
+    if(r.judgment_type==='numeric')criteria=`${r.min_value??''}~${r.max_value??''}`;
+    else if(r.judgment_type==='signal')criteria=`ON≥${r.signal_on_threshold} OFF≤${r.signal_off_threshold}`;
+    else criteria=r.color_mapping_json||'';
+    return `<tr><td>${r.id}</td><td>${r.equipment_id}</td><td>${r.template_id}</td>
+      <td>${r.judgment_type}</td><td>${criteria}</td><td>${r.unit||''}</td></tr>`;
+  }).join('');
+}
+async function addRule(){
+  const t=document.getElementById('rule-type').value;
+  const body={
+    equipment_id:+document.getElementById('rule-equip').value,
+    template_id:+document.getElementById('rule-tmpl').value,
+    judgment_type:t,
+  };
+  if(t==='numeric'){
+    body.min_value=parseFloat(document.getElementById('rule-min').value)||null;
+    body.max_value=parseFloat(document.getElementById('rule-max').value)||null;
+    body.unit=document.getElementById('rule-unit').value;
+  }else if(t==='signal'){
+    body.signal_on_threshold=+document.getElementById('rule-on').value;
+    body.signal_off_threshold=+document.getElementById('rule-off').value;
+    body.target_text=document.getElementById('rule-text').value;
+  }else{
+    body.color_mapping_json=document.getElementById('rule-color').value;
+  }
+  await api('/rules',{method:'POST',body:JSON.stringify(body)});
+  loadRules();
+}
+
+// ═══ 결과 ═══
+async function loadResults(){
+  let url='/inspection-results?limit=50';
+  const eqId=document.getElementById('res-equip')?.value;
+  const dt=document.getElementById('res-date')?.value;
+  const flt=document.getElementById('res-filter')?.value;
+  if(eqId)url+=`&equipment_id=${eqId}`;
+  if(dt)url+=`&date_from=${dt}&date_to=${dt}`;
+  const data=await api(url);
+  const filtered=flt?data.filter(r=>r.judgment_result===flt):data;
+  document.getElementById('resultTable').innerHTML=filtered.map(r=>{
+    const bc=r.judgment_result==='OK'?'badge-ok':r.judgment_result==='NG'?'badge-ng':'badge-err';
+    return `<tr><td>${r.id}</td><td>${r.judgment_type}</td><td>${r.raw_text||'-'}</td>
+      <td>${r.parsed_value??'-'}</td><td><span class="badge ${bc}">${r.judgment_result}</span></td>
+      <td>${r.confidence?Math.round(r.confidence*100)+'%':'-'}</td>
+      <td>${r.corrected_yn?'<span class="badge badge-corr">보정됨</span>':''}</td>
+      <td>${(r.created_at||'').substring(0,19)}</td></tr>`;
+  }).join('');
+}
+
+// ═══ 보정 이력 ═══
+async function loadCorrs(){
+  const data=await api('/correction-logs');
+  // 통계
+  const reasons={};
+  data.forEach(l=>{const r=l.correction_reason||'기타';reasons[r]=(reasons[r]||0)+1});
+  document.getElementById('corrStats').innerHTML=`
+    <div class="stat-box"><div class="num">${data.length}</div><div class="label">전체 보정</div></div>
+    ${Object.entries(reasons).map(([k,v])=>`<div class="stat-box"><div class="num">${v}</div><div class="label">${k}</div></div>`).join('')}`;
+
+  document.getElementById('corrTable').innerHTML=data.map(l=>`<tr>
+    <td>${l.id}</td><td>${l.inspection_result_id}</td>
+    <td><span class="badge badge-ng">${l.previous_result}</span></td>
+    <td><span class="badge badge-ok">${l.corrected_result}</span></td>
+    <td>${l.corrected_value??'-'}</td><td>${l.correction_reason||''}</td>
+    <td>${(l.created_at||'').substring(0,19)}</td>
+  </tr>`).join('');
+}
+
+// 초기화
+loadEquips();
+</script>
+</body>
+</html>

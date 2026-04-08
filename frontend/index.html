@@ -566,6 +566,103 @@ function judgeNumeric(value, rule) {
 }
 
 // ═══════════════════════════════════
+// 신호형/색상형: ROI 영역 밝기·색상 분석
+// ═══════════════════════════════════
+function analyzeSignal(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  const total = w * h;
+
+  let sumR = 0, sumG = 0, sumB = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    sumR += d[i]; sumG += d[i+1]; sumB += d[i+2];
+  }
+  const avgR = Math.round(sumR / total);
+  const avgG = Math.round(sumG / total);
+  const avgB = Math.round(sumB / total);
+  const brightness = Math.round((avgR + avgG + avgB) / 3);
+
+  // 지배 색상 판별
+  let dominantColor = 'none';
+  if (brightness < 40) {
+    dominantColor = 'dark';  // 소등
+  } else if (avgG > avgR * 1.3 && avgG > avgB * 1.3) {
+    dominantColor = 'green';
+  } else if (avgR > avgG * 1.3 && avgR > avgB * 1.3) {
+    dominantColor = 'red';
+  } else if (avgB > avgR * 1.3 && avgB > avgG * 1.3) {
+    dominantColor = 'blue';
+  } else if (avgR > 150 && avgG > 100 && avgB < 80) {
+    dominantColor = 'yellow';
+  } else if (brightness > 200) {
+    dominantColor = 'white';
+  } else {
+    dominantColor = 'mixed';
+  }
+
+  const colorNames = { dark:'소등', green:'녹색', red:'빨간색', blue:'파란색', yellow:'노란색', white:'흰색', mixed:'혼합', none:'없음' };
+
+  return {
+    avgR, avgG, avgB, brightness, dominantColor,
+    colorName: colorNames[dominantColor] || dominantColor,
+    summary: `밝기=${brightness} RGB=(${avgR},${avgG},${avgB}) ${colorNames[dominantColor]}`,
+    confidence: brightness > 20 ? 0.9 : 0.5,
+  };
+}
+
+function judgeSignal(signalData, rule) {
+  if (!rule) return { result: 'ERROR', reason: '판정 규칙이 없습니다' };
+  const b = signalData.brightness;
+  const onTh = rule.signal_on_threshold ?? 150;
+  const offTh = rule.signal_off_threshold ?? 50;
+
+  // 밝기 기반 ON/OFF
+  if (b >= onTh) {
+    // ON 상태 — 색상도 확인
+    if (signalData.dominantColor === 'green') {
+      return { result: 'OK', reason: `ON (밝기=${b}≥${onTh}, 녹색 — 정상)` };
+    } else if (signalData.dominantColor === 'red') {
+      return { result: 'NG', reason: `ON (밝기=${b}≥${onTh}, 빨간색 — 이상)` };
+    }
+    return { result: 'OK', reason: `ON (밝기=${b}≥${onTh})` };
+  } else if (b <= offTh) {
+    return { result: 'NG', reason: `OFF (밝기=${b}≤${offTh} — 소등)` };
+  } else {
+    return { result: 'ERROR', reason: `불확실 (밝기=${b}, ${offTh}~${onTh} 구간 — 재촬영 권장)` };
+  }
+}
+
+function judgeColor(signalData, rule) {
+  if (!rule) return { result: 'ERROR', reason: '판정 규칙이 없습니다' };
+
+  // 색상 매핑 JSON 파싱
+  let mapping = {};
+  try {
+    mapping = JSON.parse(rule.color_mapping_json || '{}');
+  } catch(e) {
+    return { result: 'ERROR', reason: '색상 매핑 JSON 파싱 실패' };
+  }
+
+  const color = signalData.dominantColor;
+  const status = mapping[color];
+
+  if (status) {
+    // 매핑에서 찾음 — "가동", "정지", "대기" 등
+    const isOk = ['가동', '정상', 'ok', 'OK', 'run', 'RUN'].some(k => status.includes(k));
+    const isNg = ['정지', '이상', 'stop', 'STOP', 'ng', 'NG', 'error'].some(k => status.includes(k));
+    if (isNg) return { result: 'NG', reason: `${signalData.colorName} → ${status}` };
+    if (isOk) return { result: 'OK', reason: `${signalData.colorName} → ${status}` };
+    return { result: 'OK', reason: `${signalData.colorName} → ${status} (매핑됨)` };
+  } else if (color === 'dark') {
+    return { result: 'NG', reason: `소등 (밝기=${signalData.brightness})` };
+  } else {
+    return { result: 'ERROR', reason: `${signalData.colorName} — 매핑에 없는 색상 (재확인 필요)` };
+  }
+}
+
+// ═══════════════════════════════════
 // 판정 시작 (메인 함수)
 // ═══════════════════════════════════
 async function startJudgment() {
@@ -642,30 +739,42 @@ async function startJudgment() {
       }
     }
 
-    // 5. 판정
+    // 5. 판정 (판정 타입별 분기)
     const rule = appState.selectedRule;
-    let judgment;
+    let judgment, signalData = null;
+
     if (appState.judgmentType === 'numeric') {
       judgment = judgeNumeric(parsedValue, rule);
+    } else if (appState.judgmentType === 'signal') {
+      signalData = analyzeSignal(cropped);
+      judgment = judgeSignal(signalData, rule);
+      rawText = signalData.summary;
+      confidence = signalData.confidence;
+    } else if (appState.judgmentType === 'color') {
+      signalData = analyzeSignal(cropped);
+      judgment = judgeColor(signalData, rule);
+      rawText = signalData.summary;
+      confidence = signalData.confidence;
     } else {
-      // signal/color는 Phase 6에서 구현
-      judgment = { result: 'ERROR', reason: `${appState.judgmentType}형 판정은 준비 중` };
+      judgment = { result: 'ERROR', reason: '알 수 없는 판정 유형' };
     }
 
     // 신뢰도 경고
     let warning = null;
-    if (!rawText) warning = '텍스트를 인식하지 못했습니다';
-    else if (parsedValue === null) warning = '숫자로 변환할 수 없습니다';
-    else if (confidence < 0.5) warning = '인식 신뢰도가 낮습니다. 재촬영을 권장합니다';
+    if (appState.judgmentType === 'numeric') {
+      if (!rawText) warning = '텍스트를 인식하지 못했습니다';
+      else if (parsedValue === null) warning = '숫자로 변환할 수 없습니다';
+      else if (confidence < 0.5) warning = '인식 신뢰도가 낮습니다. 재촬영을 권장합니다';
+    }
 
     // appState 저장
-    appState.ocrResult = { rawText, parsedValue, confidence };
+    appState.ocrResult = { rawText, parsedValue, confidence, signalData };
     appState.judgmentResult = judgment.result;
 
     // 6. 결과 표시
     showResult({
       rawText, parsedValue, confidence, judgment,
-      warning, cropB64, procB64,
+      warning, cropB64, procB64, signalData,
       rule, template: appState.selectedTemplate,
       equipment: appState.equipment,
     });
@@ -690,36 +799,55 @@ function showResult(r) {
   const min = r.rule?.min_value ?? '—';
   const max = r.rule?.max_value ?? '—';
 
+  const isSignalOrColor = r.signalData != null;
+  const sd = r.signalData;
+
+  // 인식값 표시 (타입별)
+  let valueHtml;
+  if (isSignalOrColor) {
+    const colorBox = sd ? `<div style="width:60px;height:60px;border-radius:8px;margin:0 auto 8px;border:2px solid #334155;background:rgb(${sd.avgR},${sd.avgG},${sd.avgB})"></div>` : '';
+    valueHtml = `${colorBox}<div style="font-size:16px;color:#94a3b8;text-align:center">${sd?.colorName || '—'} (밝기 ${sd?.brightness || 0})</div>`;
+  } else {
+    valueHtml = `<div class="result-big ${lvClass}">${r.parsedValue !== null ? r.parsedValue : '—'}${unit ? '<span style="font-size:20px;color:#94a3b8"> '+unit+'</span>' : ''}</div>`;
+  }
+
+  // 상세 정보 (타입별)
+  let detailHtml;
+  if (isSignalOrColor) {
+    detailHtml = `
+      <div class="result-row"><span class="label">설비</span><span class="value">${r.equipment?.equipment_name || '—'}</span></div>
+      <div class="result-row"><span class="label">검사항목</span><span class="value">${r.template?.template_name || '—'}</span></div>
+      <div class="result-row"><span class="label">평균 RGB</span><span class="value" style="font-family:monospace">R=${sd.avgR} G=${sd.avgG} B=${sd.avgB}</span></div>
+      <div class="result-row"><span class="label">평균 밝기</span><span class="value">${sd.brightness}</span></div>
+      <div class="result-row"><span class="label">지배 색상</span><span class="value">${sd.colorName}</span></div>
+      <div class="result-row"><span class="label">판정 사유</span><span class="value">${r.judgment.reason}</span></div>
+      <div class="result-row"><span class="label">신뢰도</span><span class="value">${Math.round(r.confidence * 100)}%</span></div>`;
+  } else {
+    detailHtml = `
+      <div class="result-row"><span class="label">설비</span><span class="value">${r.equipment?.equipment_name || '—'}</span></div>
+      <div class="result-row"><span class="label">검사항목</span><span class="value">${r.template?.template_name || '—'}</span></div>
+      <div class="result-row"><span class="label">OCR 원문</span><span class="value">"${r.rawText || ''}"</span></div>
+      <div class="result-row"><span class="label">파싱 값</span><span class="value">${r.parsedValue !== null ? r.parsedValue : '파싱 실패'}</span></div>
+      <div class="result-row"><span class="label">판정 기준</span><span class="value">${min} ~ ${max} ${unit}</span></div>
+      <div class="result-row"><span class="label">판정 사유</span><span class="value">${r.judgment.reason}</span></div>
+      <div class="result-row"><span class="label">신뢰도</span><span class="value">${Math.round(r.confidence * 100)}%</span></div>`;
+  }
+
   document.getElementById('resultCard').innerHTML = `
-    <!-- 판정 결과 큰 글씨 -->
     <div class="result-label ${lvClass}">${lvText}</div>
-
-    <!-- 인식값 -->
-    <div class="result-big ${lvClass}">${r.parsedValue !== null ? r.parsedValue : '—'}${unit ? '<span style="font-size:20px;color:#94a3b8"> '+unit+'</span>' : ''}</div>
-
-    <!-- 경고 메시지 -->
-    ${r.warning ? `<div style="background:#78350f;color:#fbbf24;padding:8px;border-radius:6px;font-size:12px;margin-bottom:8px;text-align:center">⚠️ ${r.warning}</div>` : ''}
-
-    <!-- ROI 크롭 이미지 -->
+    ${valueHtml}
+    ${r.warning ? `<div style="background:#78350f;color:#fbbf24;padding:8px;border-radius:6px;font-size:12px;margin-bottom:8px;text-align:center">${r.warning}</div>` : ''}
     <div style="display:flex;gap:6px;margin-bottom:10px">
       <div style="flex:1;text-align:center">
         <div style="font-size:10px;color:#64748b;margin-bottom:4px">촬영 영역</div>
         <img src="${r.cropB64}" style="max-width:100%;max-height:80px;border-radius:4px;border:1px solid #334155">
       </div>
-      <div style="flex:1;text-align:center">
+      ${!isSignalOrColor ? `<div style="flex:1;text-align:center">
         <div style="font-size:10px;color:#64748b;margin-bottom:4px">전처리 후</div>
         <img src="${r.procB64}" style="max-width:100%;max-height:80px;border-radius:4px;border:1px solid #334155">
-      </div>
+      </div>` : ''}
     </div>
-
-    <!-- 상세 정보 -->
-    <div class="result-row"><span class="label">설비</span><span class="value">${r.equipment?.equipment_name || '—'}</span></div>
-    <div class="result-row"><span class="label">검사항목</span><span class="value">${r.template?.template_name || '—'}</span></div>
-    <div class="result-row"><span class="label">OCR 원문</span><span class="value">"${r.rawText || ''}"</span></div>
-    <div class="result-row"><span class="label">파싱 값</span><span class="value">${r.parsedValue !== null ? r.parsedValue : '파싱 실패'}</span></div>
-    <div class="result-row"><span class="label">판정 기준</span><span class="value">${min} ~ ${max} ${unit}</span></div>
-    <div class="result-row"><span class="label">판정 사유</span><span class="value">${r.judgment.reason}</span></div>
-    <div class="result-row"><span class="label">신뢰도</span><span class="value">${Math.round(r.confidence * 100)}%</span></div>
+    ${detailHtml}
   `;
 }
 

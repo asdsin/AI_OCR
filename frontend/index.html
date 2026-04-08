@@ -17,7 +17,7 @@ body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#0f172a;col
 .st{font-size:11px;padding:3px 8px;border-radius:10px}
 .st.on{background:#065f46;color:#6ee7b7}.st.off{background:#7f1d1d;color:#fca5a5}
 
-.main{padding:12px;max-width:500px;margin:0 auto}
+.main{padding:12px;max-width:500px;margin:0 auto;padding-bottom:60px}
 .card{background:#1e293b;border-radius:10px;padding:12px;margin-bottom:10px}
 .card-title{font-size:13px;font-weight:700;color:#94a3b8;margin-bottom:8px}
 
@@ -52,6 +52,16 @@ body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#0f172a;col
 
 #qr-reader{width:100%;border-radius:10px;overflow:hidden;margin-bottom:8px}
 #qr-reader video{border-radius:10px}
+
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#1e293b;display:flex;border-top:1px solid #334155;z-index:10}
+.nav-btn{flex:1;padding:10px 0;text-align:center;font-size:11px;color:#64748b;cursor:pointer;border:none;background:none}
+.nav-btn.active{color:#60a5fa}
+.nav-btn span{display:block;font-size:18px;margin-bottom:2px}
+
+.hist-item{background:#0f172a;border-radius:6px;padding:10px;margin-bottom:4px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.hist-item:active{background:#1e3a5f}
+.hist-badge{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700}
+.hist-badge.ok{background:#065f46;color:#6ee7b7}.hist-badge.ng{background:#7f1d1d;color:#fca5a5}.hist-badge.error{background:#78350f;color:#fbbf24}
 
 .roi-canvas{position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;touch-action:none}
 
@@ -126,9 +136,40 @@ body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#0f172a;col
   <!-- ═══ Screen 5: 판정 결과 ═══ -->
   <div id="s-result" class="screen">
     <div class="card" id="resultCard"></div>
-    <button class="btn btn-p" onclick="retakeImage()">📸 재촬영</button>
-    <button class="btn btn-s" onclick="goScreen('s-equip')">← 항목 선택으로</button>
+    <button class="btn btn-g" id="btnSave" onclick="saveResult()">💾 결과 저장</button>
+    <div id="saveSuccess" style="display:none">
+      <div style="text-align:center;padding:10px;color:#6ee7b7;font-size:13px;margin-bottom:8px">✅ 저장 완료</div>
+      <button class="btn btn-p" onclick="goScreen('s-equip')">🔄 새 검사</button>
+      <button class="btn btn-s" onclick="goScreen('s-history');loadHistory()">📜 이력 보기</button>
+    </div>
+    <button class="btn btn-s" onclick="retakeImage()">📸 재촬영</button>
     <button class="btn btn-s" onclick="goScreen('s-qr')">← QR 다시 스캔</button>
+  </div>
+
+  <!-- ═══ Screen 6: 이력 조회 ═══ -->
+  <div id="s-history" class="screen">
+    <div class="card">
+      <div class="card-title">📜 판정 이력</div>
+      <div style="display:flex;gap:4px;margin-bottom:8px">
+        <select id="histFilter" onchange="loadHistory()" style="flex:1;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px">
+          <option value="">전체 설비</option>
+        </select>
+        <input type="date" id="histDate" onchange="loadHistory()" style="padding:8px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px">
+      </div>
+      <div id="histList"></div>
+    </div>
+  </div>
+
+  <!-- ═══ Screen 7: 이력 상세 ═══ -->
+  <div id="s-detail" class="screen">
+    <div class="card" id="detailCard"></div>
+    <button class="btn btn-s" onclick="goScreen('s-history');loadHistory()">← 이력 목록</button>
+  </div>
+
+  <!-- 하단 네비게이션 -->
+  <div class="bottom-nav">
+    <button class="nav-btn active" id="navScan" onclick="goScreen('s-qr')"><span>🏷️</span>스캔</button>
+    <button class="nav-btn" id="navHist" onclick="goScreen('s-history');loadHistory()"><span>📜</span>이력</button>
   </div>
 
   <!-- 로딩 오버레이 -->
@@ -868,6 +909,129 @@ function showResult(r) {
     ${detailHtml}
   `;
 }
+
+// ═══════════════════════════════════
+// 결과 저장
+// ═══════════════════════════════════
+async function saveResult() {
+  const eq = appState.equipment;
+  const tmpl = appState.selectedTemplate;
+  const ocr = appState.ocrResult;
+  if (!eq || !tmpl) { alert('설비/템플릿 정보가 없습니다'); return; }
+
+  document.getElementById('btnSave').disabled = true;
+  document.getElementById('btnSave').textContent = '저장 중...';
+
+  try {
+    const body = {
+      equipment_id: eq.id,
+      template_id: tmpl.id,
+      judgment_type: appState.judgmentType,
+      raw_text: ocr?.rawText || null,
+      parsed_value: ocr?.parsedValue ?? null,
+      raw_color_json: ocr?.signalData ? JSON.stringify(ocr.signalData) : null,
+      judgment_result: appState.judgmentResult || 'ERROR',
+      confidence: ocr?.confidence ?? null,
+      image_base64: appState.capturedImage,
+    };
+    await apiCall('/inspection-results', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    document.getElementById('btnSave').style.display = 'none';
+    document.getElementById('saveSuccess').style.display = 'block';
+  } catch(e) {
+    alert('저장 실패: ' + e.message);
+    document.getElementById('btnSave').disabled = false;
+    document.getElementById('btnSave').textContent = '💾 결과 저장';
+  }
+}
+
+// ═══════════════════════════════════
+// 이력 조회
+// ═══════════════════════════════════
+async function loadHistory() {
+  // 설비 필터 드롭다운 채우기
+  const filterEl = document.getElementById('histFilter');
+  if (filterEl.options.length <= 1) {
+    try {
+      const equips = await apiCall('/equipments');
+      equips.forEach(e => {
+        const opt = document.createElement('option');
+        opt.value = e.id; opt.textContent = e.equipment_name;
+        filterEl.appendChild(opt);
+      });
+    } catch(e) {}
+  }
+
+  const eqId = filterEl.value;
+  const dt = document.getElementById('histDate').value;
+  let url = '/inspection-results?limit=20';
+  if (eqId) url += `&equipment_id=${eqId}`;
+  if (dt) url += `&date_from=${dt}&date_to=${dt}`;
+
+  const listEl = document.getElementById('histList');
+  listEl.innerHTML = '<div style="text-align:center;color:#64748b;padding:16px">로딩 중...</div>';
+
+  try {
+    const results = await apiCall(url);
+    if (!results.length) {
+      listEl.innerHTML = '<div style="text-align:center;color:#64748b;padding:16px">이력이 없습니다</div>';
+      return;
+    }
+    listEl.innerHTML = results.map(r => {
+      const lvClass = r.judgment_result === 'OK' ? 'ok' : r.judgment_result === 'NG' ? 'ng' : 'error';
+      const time = r.created_at ? r.created_at.split('.')[0].replace('T', ' ').substring(5) : '';
+      const typeIcon = {numeric:'🔢', signal:'💡', color:'🎨'}[r.judgment_type] || '❓';
+      return `<div class="hist-item" onclick="showDetail(${r.id})">
+        <span class="hist-badge ${lvClass}">${r.judgment_result}</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${typeIcon} ${r.raw_text || r.parsed_value || '—'}</div>
+          <div style="font-size:10px;color:#64748b">${time}</div>
+        </div>
+        <span style="color:#64748b;font-size:11px">${r.confidence ? Math.round(r.confidence*100)+'%' : ''}</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    listEl.innerHTML = `<div style="color:#fca5a5;padding:8px">${e.message}</div>`;
+  }
+}
+
+async function showDetail(id) {
+  try {
+    const r = await apiCall(`/inspection-results/${id}`);
+    const lvClass = r.judgment_result === 'OK' ? 'ok' : r.judgment_result === 'NG' ? 'ng' : 'error';
+    const lvText = r.judgment_result === 'OK' ? '✅ 정상' : r.judgment_result === 'NG' ? '❌ 이상' : '⚠️ 오류';
+    document.getElementById('detailCard').innerHTML = `
+      <div class="result-label ${lvClass}">${lvText}</div>
+      ${r.image_path ? `<div style="text-align:center;margin-bottom:8px"><img src="${API}${r.image_path}" style="max-width:100%;max-height:200px;border-radius:6px"></div>` : ''}
+      <div class="result-row"><span class="label">판정 유형</span><span class="value">${r.judgment_type}</span></div>
+      <div class="result-row"><span class="label">OCR 원문</span><span class="value">"${r.raw_text || ''}"</span></div>
+      <div class="result-row"><span class="label">파싱 값</span><span class="value">${r.parsed_value ?? '—'}</span></div>
+      <div class="result-row"><span class="label">판정</span><span class="value">${r.judgment_result}</span></div>
+      <div class="result-row"><span class="label">신뢰도</span><span class="value">${r.confidence ? Math.round(r.confidence*100)+'%' : '—'}</span></div>
+      <div class="result-row"><span class="label">보정 여부</span><span class="value">${r.corrected_yn ? '보정됨' : '원본'}</span></div>
+      <div class="result-row"><span class="label">시간</span><span class="value">${r.created_at}</span></div>
+      <button class="btn btn-s" style="margin-top:8px" onclick="alert('Phase 9에서 구현')">✏️ 정답 보정</button>`;
+    goScreen('s-detail');
+  } catch(e) { alert('상세 조회 실패: ' + e.message); }
+}
+
+// 화면 전환 시 네비게이션 하이라이트
+const _origGoScreen = goScreen;
+goScreen = function(id) {
+  _origGoScreen(id);
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  if (id === 's-history' || id === 's-detail') document.getElementById('navHist').classList.add('active');
+  else document.getElementById('navScan').classList.add('active');
+  // 결과 화면 초기화
+  if (id !== 's-result') {
+    document.getElementById('btnSave').style.display = 'block';
+    document.getElementById('btnSave').disabled = false;
+    document.getElementById('btnSave').textContent = '💾 결과 저장';
+    document.getElementById('saveSuccess').style.display = 'none';
+  }
+};
 
 // ═══ PWA 서비스워커 ═══
 if ('serviceWorker' in navigator) {

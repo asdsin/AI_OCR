@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.db import init_db, DB_PATH
-from app.routers import equipment, template, rule
+from app.routers import equipment, template, rule, inspection
 
 # ── 로깅 설정 ──
 logging.basicConfig(
@@ -83,6 +83,7 @@ async def root():
 app.include_router(equipment.router)
 app.include_router(template.router)
 app.include_router(rule.router)
+app.include_router(inspection.router)
 
 
 # ── 헬스체크 엔드포인트 ──

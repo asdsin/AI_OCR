@@ -205,7 +205,7 @@ label:first-child{margin-top:0}
       <div class="live-cam"><img id="refPrevImg" style="object-fit:contain"></div>
       <div class="cam-btn-row">
         <button class="btn bp" style="flex:1" onclick="submitRef()">🔍 분석 시작</button>
-        <button class="btn bs" style="flex:1" onclick="retakeRef()">↩️ 다시 촬영</button>
+        <button class="btn bs" style="flex:1" onclick="resetRefStep1()">↩️ 다시 선택</button>
       </div>
     </div>
 
@@ -737,15 +737,22 @@ async function captureRef(){
   document.getElementById('refCamView').style.display='none';
   document.getElementById('refPrev').style.display='block';
 }
-function retakeRef(){
+function resetRefStep1(){
+  // 모든 상태 초기화 → 시작 화면으로
+  _closeCam();
+  _refBlob=null;
   document.getElementById('refPrev').style.display='none';
-  startRefCam();
+  document.getElementById('refCamView').style.display='none';
+  document.getElementById('refAnalyzing').style.display='none';
+  document.getElementById('refStartBtns').style.display='block';
+  document.getElementById('refFile').value=''; // 같은 파일 재선택 가능
 }
 function handleRefFile(e){
   const f=e.target.files[0];if(!f)return;
   _refBlob=f;
   document.getElementById('refPrevImg').src=URL.createObjectURL(f);
   document.getElementById('refStartBtns').style.display='none';
+  document.getElementById('refCamView').style.display='none';
   document.getElementById('refPrev').style.display='block';
 }
 async function submitRef(){
@@ -763,7 +770,7 @@ async function submitRef(){
     setStep(2);
   }catch(err){
     alert('분석 실패: '+err.message);
-    document.getElementById('refStartBtns').style.display='block';
+    resetRefStep1();
   }finally{document.getElementById('refAnalyzing').style.display='none'}
 }
 

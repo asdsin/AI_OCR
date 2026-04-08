@@ -11,4 +11,5 @@ data/
 plc_samples/
 judgment_result.json
 certs/
+venv*/
 .claude/

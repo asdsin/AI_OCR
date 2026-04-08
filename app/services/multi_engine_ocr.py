@@ -96,9 +96,26 @@ def _run_easyocr(reader, img):
         return "", 0
 
 
+def _run_paddleocr(img):
+    """PaddleOCR (Python 3.11 subprocess)"""
+    try:
+        from app.services.paddle_bridge import run_paddle_ocr, is_available
+        if not is_available():
+            return "", 0
+        items = run_paddle_ocr(img, timeout=30)
+        if not items:
+            return "", 0
+        # 가장 신뢰도 높은 것
+        best = max(items, key=lambda x: x["confidence"])
+        return best["text"], best["confidence"]
+    except Exception as e:
+        logger.debug(f"PaddleOCR 실패: {e}")
+        return "", 0
+
+
 def multi_engine_ocr(reader, img: np.ndarray) -> dict:
     """
-    멀티엔진 OCR: EasyOCR(3) + Tesseract(3) = 6후보 → 다수결
+    멀티엔진 OCR: EasyOCR(3) + Tesseract(3) + PaddleOCR(1) → 다수결
 
     Returns: {value, text, confidence, method, engines, all_attempts}
     """
@@ -114,12 +131,21 @@ def multi_engine_ocr(reader, img: np.ndarray) -> dict:
         attempts.append({"engine":"easyocr","variant":i,"raw":raw,"fixed":fixed,"value":val,"confidence":conf})
 
         # Tesseract
-        # Tesseract는 그레이/이진 이미지가 더 잘 동작
         tess_img = v if len(v.shape)==2 else cv2.cvtColor(v, cv2.COLOR_BGR2GRAY)
         raw_t, conf_t = _run_tesseract(tess_img)
         fixed_t = _fix(raw_t)
         val_t = _num(fixed_t)
         attempts.append({"engine":"tesseract","variant":i,"raw":raw_t,"fixed":fixed_t,"value":val_t,"confidence":conf_t})
+
+    # PaddleOCR (원본 이미지 1회 — 가장 정확한 엔진)
+    raw_p, conf_p = _run_paddleocr(img)
+    fixed_p = _fix(raw_p)
+    val_p = _num(fixed_p)
+    if val_p is not None:
+        # PaddleOCR 결과에 신뢰도 가중치 (가장 정확한 엔진이므로)
+        attempts.append({"engine":"paddleocr","variant":0,"raw":raw_p,"fixed":fixed_p,"value":val_p,"confidence":min(1.0, conf_p+0.1)})
+        # PaddleOCR 결과를 2표로 (가중 투표)
+        attempts.append({"engine":"paddleocr","variant":1,"raw":raw_p,"fixed":fixed_p,"value":val_p,"confidence":min(1.0, conf_p+0.1)})
 
     elapsed = int((time.time() - start) * 1000)
 

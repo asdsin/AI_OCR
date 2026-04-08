@@ -1,0 +1,11 @@
+{
+  "name": "PLC OCR Agent",
+  "short_name": "PLC OCR",
+  "description": "PLC 화면 촬영 → OCR → OK/NG 판정",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait",
+  "icons": []
+}

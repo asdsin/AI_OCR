@@ -11,8 +11,8 @@ from app.models import InspectionResult
 
 router = APIRouter(prefix="/inspection-results", tags=["판정 결과"])
 
-# 이미지 저장 경로
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 이미지 저장 경로: backend/data/images/
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # backend/
 IMAGE_DIR = os.path.join(BASE_DIR, "data", "images")
 
 

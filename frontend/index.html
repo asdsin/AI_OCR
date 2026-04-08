@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.json">
 <title>AI 인식 PoC v2</title>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;font-size:14px}
@@ -35,6 +36,16 @@ body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#0f172a;col
 .badge-num{background:#065f46;color:#6ee7b7}.badge-sig{background:#78350f;color:#fbbf24}.badge-col{background:#1e3a5f;color:#60a5fa}
 
 .screen{display:none}.screen.active{display:block}
+
+.result-big{font-size:48px;font-weight:900;text-align:center;padding:16px 0}
+.result-big.ok{color:#22c55e}.result-big.ng{color:#ef4444}.result-big.error{color:#f59e0b}
+.result-label{font-size:28px;font-weight:800;text-align:center;padding:8px;border-radius:8px;margin-bottom:12px}
+.result-label.ok{background:#065f46;color:#6ee7b7}.result-label.ng{background:#7f1d1d;color:#fca5a5}.result-label.error{background:#78350f;color:#fbbf24}
+.result-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #334155;font-size:13px}
+.result-row .label{color:#94a3b8}.result-row .value{font-weight:600}
+.loading-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100}
+.spinner{width:40px;height:40px;border:4px solid #334155;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 .cam-wrap{position:relative;width:100%;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden;margin-bottom:8px}
 .cam-wrap video,.cam-wrap canvas,.cam-wrap img{width:100%;height:100%;object-fit:contain}
@@ -112,15 +123,18 @@ body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#0f172a;col
     </div>
   </div>
 
-  <!-- ═══ Screen 5: 판정 결과 (Phase 5에서 구현) ═══ -->
+  <!-- ═══ Screen 5: 판정 결과 ═══ -->
   <div id="s-result" class="screen">
-    <div class="card">
-      <div class="card-title">📊 판정 결과</div>
-      <div id="resultContent" style="text-align:center;padding:20px;color:#64748b">Phase 5에서 구현 예정</div>
-    </div>
-    <button class="btn btn-p" onclick="goScreen('s-camera');startCamera()">📸 재촬영</button>
+    <div class="card" id="resultCard"></div>
+    <button class="btn btn-p" onclick="retakeImage()">📸 재촬영</button>
     <button class="btn btn-s" onclick="goScreen('s-equip')">← 항목 선택으로</button>
     <button class="btn btn-s" onclick="goScreen('s-qr')">← QR 다시 스캔</button>
+  </div>
+
+  <!-- 로딩 오버레이 -->
+  <div id="loadingOverlay" class="loading-overlay" style="display:none">
+    <div class="spinner"></div>
+    <div style="margin-top:16px;color:#94a3b8" id="loadingText">분석 중...</div>
   </div>
 </div>
 
@@ -426,21 +440,241 @@ function saveRoiToState() {
 }
 
 // ═══════════════════════════════════
-// 판정 시작 (Phase 5에서 구현)
+// 이미지 전처리 (Canvas API)
 // ═══════════════════════════════════
-function startJudgment() {
-  // Phase 5에서 OCR + 판정 로직 구현
-  document.getElementById('resultContent').innerHTML = `
-    <div style="text-align:left;font-size:12px">
-      <b>appState 확인:</b><br>
-      설비: ${appState.equipment?.equipment_name}<br>
-      템플릿: ${appState.selectedTemplate?.template_name}<br>
-      판정타입: ${appState.judgmentType}<br>
-      규칙: ${appState.selectedRule ? JSON.stringify({min:appState.selectedRule.min_value, max:appState.selectedRule.max_value, unit:appState.selectedRule.unit}) : 'null'}<br>
-      ROI: ${JSON.stringify(appState.roi)}<br>
-      이미지: ${appState.capturedImage ? '있음 (' + Math.round(appState.capturedImage.length/1024) + 'KB)' : '없음'}
-    </div>`;
+function cropRoi(imgSrc, roi) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const sx = Math.round(roi.x / 100 * img.width);
+      const sy = Math.round(roi.y / 100 * img.height);
+      const sw = Math.round(roi.w / 100 * img.width);
+      const sh = Math.round(roi.h / 100 * img.height);
+      const c = document.createElement('canvas');
+      c.width = sw; c.height = sh;
+      c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      resolve(c);
+    };
+    img.src = imgSrc;
+  });
+}
+
+function preprocessCanvas(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+
+  // 업스케일 (글자가 작으면 확대)
+  if (Math.max(w, h) < 200) {
+    const scale = 400 / Math.max(w, h);
+    const c2 = document.createElement('canvas');
+    c2.width = Math.round(w * scale); c2.height = Math.round(h * scale);
+    c2.getContext('2d').drawImage(canvas, 0, 0, c2.width, c2.height);
+    canvas = c2;
+  }
+
+  const ctx2 = canvas.getContext('2d');
+  const imgData = ctx2.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imgData.data;
+
+  // 1. 그레이스케일
+  for (let i = 0; i < d.length; i += 4) {
+    const g = d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114;
+    d[i] = d[i+1] = d[i+2] = g;
+  }
+
+  // 2. 대비 강화 (contrast stretch)
+  let min = 255, max = 0;
+  for (let i = 0; i < d.length; i += 4) { min = Math.min(min, d[i]); max = Math.max(max, d[i]); }
+  const range = max - min || 1;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = Math.round((d[i] - min) / range * 255);
+    d[i] = d[i+1] = d[i+2] = v;
+  }
+
+  // 3. 이진화 (Otsu 간이 버전)
+  let sum = 0, cnt = 0;
+  for (let i = 0; i < d.length; i += 4) { sum += d[i]; cnt++; }
+  const thresh = sum / cnt;  // 평균값 기준
+  for (let i = 0; i < d.length; i += 4) {
+    const v = d[i] > thresh ? 255 : 0;
+    d[i] = d[i+1] = d[i+2] = v;
+  }
+
+  ctx2.putImageData(imgData, 0, 0);
+
+  // 4. 패딩 (가장자리 보호)
+  const pad = 15;
+  const padded = document.createElement('canvas');
+  padded.width = canvas.width + pad*2;
+  padded.height = canvas.height + pad*2;
+  const pctx = padded.getContext('2d');
+  pctx.fillStyle = '#fff';
+  pctx.fillRect(0, 0, padded.width, padded.height);
+  pctx.drawImage(canvas, pad, pad);
+
+  return padded;
+}
+
+// ═══════════════════════════════════
+// Tesseract.js OCR 실행
+// ═══════════════════════════════════
+async function runOcr(canvas) {
+  const worker = await Tesseract.createWorker('eng', 1, {
+    logger: m => {
+      if (m.status === 'recognizing text') {
+        document.getElementById('loadingText').textContent =
+          `OCR 분석 중... ${Math.round((m.progress||0)*100)}%`;
+      }
+    }
+  });
+  await worker.setParameters({
+    tessedit_char_whitelist: '0123456789.,-',  // 숫자+소수점만
+    tessedit_pageseg_mode: '7',  // 한 줄 텍스트
+  });
+  const { data } = await worker.recognize(canvas);
+  await worker.terminate();
+  return data;  // {text, confidence, ...}
+}
+
+// ═══════════════════════════════════
+// 수치형 판정 로직
+// ═══════════════════════════════════
+function parseNumericValue(rawText) {
+  if (!rawText || !rawText.trim()) return null;
+  // 후처리: 흔한 OCR 오류 보정
+  let t = rawText.trim()
+    .replace(/[oO]/g, '0')
+    .replace(/[lI|]/g, '1')
+    .replace(/[sS]/g, '5')
+    .replace(/[,_]/g, '.')
+    .replace(/\s/g, '');
+  // 숫자+소수점만 추출
+  const match = t.match(/-?\d+\.?\d*/);
+  return match ? parseFloat(match[0]) : null;
+}
+
+function judgeNumeric(value, rule) {
+  if (value === null) return { result: 'ERROR', reason: '숫자로 변환할 수 없습니다' };
+  if (!rule) return { result: 'ERROR', reason: '판정 규칙이 없습니다' };
+  const min = rule.min_value;
+  const max = rule.max_value;
+  if (min !== null && min !== undefined && value < min)
+    return { result: 'NG', reason: `${value} < 최소 ${min}` };
+  if (max !== null && max !== undefined && value > max)
+    return { result: 'NG', reason: `${value} > 최대 ${max}` };
+  return { result: 'OK', reason: `${min}~${max} 범위 내` };
+}
+
+// ═══════════════════════════════════
+// 판정 시작 (메인 함수)
+// ═══════════════════════════════════
+async function startJudgment() {
+  if (!appState.capturedImage || !appState.roi) return;
+
+  // 로딩 표시
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  document.getElementById('loadingText').textContent = '이미지 전처리 중...';
+
+  try {
+    // 1. ROI 크롭
+    const cropped = await cropRoi(appState.capturedImage, appState.roi);
+
+    // 2. 전처리
+    document.getElementById('loadingText').textContent = '전처리 중...';
+    const processed = preprocessCanvas(cropped);
+
+    // 크롭/전처리 이미지를 base64로 저장 (결과 화면용)
+    const cropB64 = cropped.toDataURL('image/jpeg', 0.9);
+    const procB64 = processed.toDataURL('image/jpeg', 0.9);
+
+    // 3. OCR 실행
+    document.getElementById('loadingText').textContent = 'OCR 분석 중...';
+    const ocrData = await runOcr(processed);
+    const rawText = ocrData.text.trim();
+    const confidence = Math.round(ocrData.confidence) / 100;  // 0~1
+
+    // 4. 수치 파싱
+    const parsedValue = parseNumericValue(rawText);
+
+    // 5. 판정
+    const rule = appState.selectedRule;
+    let judgment;
+    if (appState.judgmentType === 'numeric') {
+      judgment = judgeNumeric(parsedValue, rule);
+    } else {
+      // signal/color는 Phase 6에서 구현
+      judgment = { result: 'ERROR', reason: `${appState.judgmentType}형 판정은 준비 중` };
+    }
+
+    // 신뢰도 경고
+    let warning = null;
+    if (!rawText) warning = '텍스트를 인식하지 못했습니다';
+    else if (parsedValue === null) warning = '숫자로 변환할 수 없습니다';
+    else if (confidence < 0.5) warning = '인식 신뢰도가 낮습니다. 재촬영을 권장합니다';
+
+    // appState 저장
+    appState.ocrResult = { rawText, parsedValue, confidence };
+    appState.judgmentResult = judgment.result;
+
+    // 6. 결과 표시
+    showResult({
+      rawText, parsedValue, confidence, judgment,
+      warning, cropB64, procB64,
+      rule, template: appState.selectedTemplate,
+      equipment: appState.equipment,
+    });
+
+  } catch(e) {
+    alert('판정 실패: ' + e.message);
+  } finally {
+    document.getElementById('loadingOverlay').style.display = 'none';
+  }
+
   goScreen('s-result');
+}
+
+// ═══════════════════════════════════
+// 결과 화면 렌더링
+// ═══════════════════════════════════
+function showResult(r) {
+  const lv = r.judgment.result;  // OK / NG / ERROR
+  const lvClass = lv === 'OK' ? 'ok' : lv === 'NG' ? 'ng' : 'error';
+  const lvText = lv === 'OK' ? '✅ 정상 (OK)' : lv === 'NG' ? '❌ 이상 (NG)' : '⚠️ 오류 (ERROR)';
+  const unit = r.rule?.unit || '';
+  const min = r.rule?.min_value ?? '—';
+  const max = r.rule?.max_value ?? '—';
+
+  document.getElementById('resultCard').innerHTML = `
+    <!-- 판정 결과 큰 글씨 -->
+    <div class="result-label ${lvClass}">${lvText}</div>
+
+    <!-- 인식값 -->
+    <div class="result-big ${lvClass}">${r.parsedValue !== null ? r.parsedValue : '—'}${unit ? '<span style="font-size:20px;color:#94a3b8"> '+unit+'</span>' : ''}</div>
+
+    <!-- 경고 메시지 -->
+    ${r.warning ? `<div style="background:#78350f;color:#fbbf24;padding:8px;border-radius:6px;font-size:12px;margin-bottom:8px;text-align:center">⚠️ ${r.warning}</div>` : ''}
+
+    <!-- ROI 크롭 이미지 -->
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <div style="flex:1;text-align:center">
+        <div style="font-size:10px;color:#64748b;margin-bottom:4px">촬영 영역</div>
+        <img src="${r.cropB64}" style="max-width:100%;max-height:80px;border-radius:4px;border:1px solid #334155">
+      </div>
+      <div style="flex:1;text-align:center">
+        <div style="font-size:10px;color:#64748b;margin-bottom:4px">전처리 후</div>
+        <img src="${r.procB64}" style="max-width:100%;max-height:80px;border-radius:4px;border:1px solid #334155">
+      </div>
+    </div>
+
+    <!-- 상세 정보 -->
+    <div class="result-row"><span class="label">설비</span><span class="value">${r.equipment?.equipment_name || '—'}</span></div>
+    <div class="result-row"><span class="label">검사항목</span><span class="value">${r.template?.template_name || '—'}</span></div>
+    <div class="result-row"><span class="label">OCR 원문</span><span class="value">"${r.rawText || ''}"</span></div>
+    <div class="result-row"><span class="label">파싱 값</span><span class="value">${r.parsedValue !== null ? r.parsedValue : '파싱 실패'}</span></div>
+    <div class="result-row"><span class="label">판정 기준</span><span class="value">${min} ~ ${max} ${unit}</span></div>
+    <div class="result-row"><span class="label">판정 사유</span><span class="value">${r.judgment.reason}</span></div>
+    <div class="result-row"><span class="label">신뢰도</span><span class="value">${Math.round(r.confidence * 100)}%</span></div>
+  `;
 }
 
 // ═══ PWA 서비스워커 ═══

@@ -1304,7 +1304,14 @@ function goStep4(){
   setStep(4);
   const cl=document.getElementById('conditionList');
   const items=[...selectedItems].map(i=>analyzeData.detected_items[i]);
-  cl.innerHTML=items.map((it,idx)=>`
+
+  // 동일 조건 적용 체크박스
+  let header=items.length>1?`<div style="background:#1e293b;border-radius:6px;padding:8px;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+    <input type="checkbox" id="applyAllSame" onchange="applySameCondition()" style="width:18px;height:18px;accent-color:#3b82f6">
+    <label for="applyAllSame" style="margin:0;font-size:12px;color:#94a3b8;cursor:pointer">첫 번째 항목의 조건을 <b style="color:#60a5fa">전체 동일 적용</b></label>
+  </div>`:'';
+
+  cl.innerHTML=header+items.map((it,idx)=>`
     <div class="sel-item" data-idx="${[...selectedItems][idx]}">
       <div class="sel-head">
         <span class="sel-val">${it.is_numeric?it.value:'—'}</span>
@@ -1340,6 +1347,33 @@ function goStep4(){
       <input class="inp cond-name" placeholder="예: #1-2 MAX전류" value="">
     </div>
   `).join('');
+}
+
+function applySameCondition(){
+  const checked=document.getElementById('applyAllSame')?.checked;
+  if(!checked)return;
+  const allItems=document.querySelectorAll('.sel-item');
+  if(allItems.length<2)return;
+  const first=allItems[0];
+  const condType=first.querySelector('.cond-type')?.value||'range';
+  const okMin=first.querySelector('.cond-ok-min')?.value||'';
+  const okMax=first.querySelector('.cond-ok-max')?.value||'';
+  const threshold=first.querySelector('.cond-threshold')?.value||'';
+  const tolerance=first.querySelector('.cond-tolerance')?.value||'';
+  const okText=first.querySelector('.cond-ok-text')?.value||'';
+  const ngText=first.querySelector('.cond-ng-text')?.value||'';
+
+  for(let i=1;i<allItems.length;i++){
+    const el=allItems[i];
+    const ct=el.querySelector('.cond-type');
+    if(ct){ct.value=condType;toggleCondFields(ct)}
+    const omin=el.querySelector('.cond-ok-min');if(omin)omin.value=okMin;
+    const omax=el.querySelector('.cond-ok-max');if(omax)omax.value=okMax;
+    const th=el.querySelector('.cond-threshold');if(th)th.value=threshold;
+    const tol=el.querySelector('.cond-tolerance');if(tol)tol.value=tolerance;
+    const ot=el.querySelector('.cond-ok-text');if(ot)ot.value=okText;
+    const nt=el.querySelector('.cond-ng-text');if(nt)nt.value=ngText;
+  }
 }
 
 function toggleCondFields(sel){

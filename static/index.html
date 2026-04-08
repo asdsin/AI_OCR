@@ -154,24 +154,9 @@ label:first-child{margin-top:0}
     </div>
   </div>
 
-  <!-- 데이터 테이블 -->
-  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px" id="qrTable">
-      <thead>
-        <tr style="background:#1e293b;position:sticky;top:0">
-          <th style="padding:6px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">설비</th>
-          <th style="padding:6px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">QR / 화면</th>
-          <th style="padding:6px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">공정</th>
-          <th style="padding:6px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">라인</th>
-          <th style="padding:6px 8px;text-align:left;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">PLC</th>
-          <th style="padding:6px 8px;text-align:center;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">상태</th>
-          <th style="padding:6px 8px;text-align:center;color:#94a3b8;border-bottom:1px solid #334155;white-space:nowrap">작업</th>
-        </tr>
-      </thead>
-      <tbody id="qrTableBody">
-        <tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b">로딩 중...</td></tr>
-      </tbody>
-    </table>
+  <!-- 데이터 카드 리스트 -->
+  <div id="qrCardList" style="padding-bottom:4px">
+    <div style="text-align:center;padding:20px;color:#64748b">로딩 중...</div>
   </div>
 
   <!-- 하단 추가 버튼 -->
@@ -503,30 +488,31 @@ function onFilterChange(){
     return true;
   });
 
-  const tbody=document.getElementById('qrTableBody');
+  const el=document.getElementById('qrCardList');
   if(!filtered.length){
-    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b">데이터가 없습니다</td></tr>';
+    el.innerHTML='<div style="text-align:center;padding:20px;color:#64748b">데이터가 없습니다</div>';
     return;
   }
 
-  tbody.innerHTML=filtered.map(r=>{
-    const st=r.has_profile
-      ?`<span class="badge ok" style="font-size:10px">${r.rules_count}개</span>`
-      :'<span class="badge ng" style="font-size:10px">미설정</span>';
-    return `<tr style="border-bottom:1px solid #1e293b;cursor:pointer" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background=''">
-      <td style="padding:6px 8px;white-space:nowrap"><b>${r.equipment_name}</b><br><span style="color:#64748b;font-size:10px">${r.equipment_code}</span></td>
-      <td style="padding:6px 8px"><b style="color:#60a5fa">${r.qr_code}</b><br><span style="color:#94a3b8;font-size:10px">${r.screen_name}</span></td>
-      <td style="padding:6px 8px;color:#94a3b8">${r.process}</td>
-      <td style="padding:6px 8px;color:#94a3b8">${r.line}</td>
-      <td style="padding:6px 8px;color:#64748b;font-size:11px">${r.plc_type||'-'}</td>
-      <td style="padding:6px 8px;text-align:center">${st}</td>
-      <td style="padding:4px;text-align:center;white-space:nowrap">
-        <button class="btn-sm bp" onclick="selectQr('${r.id}','${r.qr_code}','${esc(r.screen_name)}',${r.has_profile});selEquipName='${esc(r.equipment_name)}'">기준</button>
-        ${r.has_profile?`<button class="btn-sm bg" onclick="quickJudge('${r.qr_code}','${esc(r.screen_name)}');selEquipName='${esc(r.equipment_name)}'">판정</button>`:''}
-        <button class="btn-sm bs" onclick="printQrLabel('${r.id}')">🖨️</button>
-        <button class="btn-sm bs" onclick="copyQrImg('${r.id}')">📋</button>
-      </td>
-    </tr>`;
+  el.innerHTML=filtered.map(r=>{
+    const profileColor=r.has_profile?'#22c55e':'#64748b';
+    const st=r.has_profile?`<span style="color:#6ee7b7;font-size:10px">${r.rules_count}개 설정</span>`:'<span style="color:#fca5a5;font-size:10px">미설정</span>';
+
+    return `<div style="background:#1e293b;border-radius:8px;padding:8px 10px;margin-bottom:4px;border-left:3px solid ${profileColor}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.equipment_name}</div>
+          <div style="color:#60a5fa;font-size:12px;font-weight:600">${r.qr_code} <span style="color:#94a3b8;font-weight:400">· ${r.screen_name}</span></div>
+          <div style="font-size:10px;color:#64748b">${r.process} · ${r.line} · ${r.plc_type||'-'} ${st}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn-sm bp" onclick="selectQr('${r.id}','${r.qr_code}','${esc(r.screen_name)}',${r.has_profile});selEquipName='${esc(r.equipment_name)}'">📐 기준</button>
+        ${r.has_profile?`<button class="btn-sm bg" onclick="quickJudge('${r.qr_code}','${esc(r.screen_name)}');selEquipName='${esc(r.equipment_name)}'">📸 판정</button>`:''}
+        <button class="btn-sm bs" onclick="printQrLabel('${r.id}')" title="인쇄">🖨️</button>
+        <button class="btn-sm bs" onclick="copyQrImg('${r.id}')" title="복사">📋</button>
+      </div>
+    </div>`;
   }).join('');
 }
 

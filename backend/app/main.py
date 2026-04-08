@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from app.db import init_db, DB_PATH
 
 # ── 로깅 설정 ──
 logging.basicConfig(
@@ -30,10 +31,13 @@ async def lifespan(app: FastAPI):
     # 데이터 디렉터리 자동 생성
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DB_DIR, exist_ok=True)
+    # DB 테이블 자동 생성
+    init_db()
     logger.info("=" * 50)
     logger.info("AI 인식 PoC v2 서버 시작")
     logger.info(f"  데이터 경로: {DATA_DIR}")
     logger.info(f"  이미지 경로: {IMAGE_DIR}")
+    logger.info(f"  DB 경로: {DB_PATH}")
     logger.info("=" * 50)
     yield
     # ── 종료 ──
@@ -57,8 +61,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── 정적 파일 서빙 (이미지) ──
+# ── 정적 파일 서빙 ──
 app.mount("/images", StaticFiles(directory=IMAGE_DIR), name="images")
+
+# 프론트엔드 서빙 (frontend/ 폴더)
+FRONTEND_DIR = os.path.join(BASE_DIR, "..", "frontend")
+if os.path.exists(FRONTEND_DIR):
+    app.mount("/app", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+
+# ── 루트 → 프론트엔드 리다이렉트 ──
+@app.get("/", tags=["시스템"])
+async def root():
+    """루트 접속 시 프론트엔드로 이동"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/app/index.html")
 
 
 # ── 헬스체크 엔드포인트 ──

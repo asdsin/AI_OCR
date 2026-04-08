@@ -1,7 +1,7 @@
 {
-  "name": "PLC OCR Agent",
+  "name": "AI 인식 PoC v2",
   "short_name": "PLC OCR",
-  "description": "PLC 화면 촬영 → OCR → OK/NG 판정",
+  "description": "PLC 화면 촬영 → OCR → OK/NG 판정 (폐쇄망)",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

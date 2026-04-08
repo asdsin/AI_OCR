@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<title>AI 인식 PoC v2</title>
+<style>
+/* ── 리셋 + 기본 ── */
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;font-size:14px}
+
+/* ── 헤더 ── */
+.header{background:#1e293b;padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #334155;position:sticky;top:0;z-index:10}
+.header h1{font-size:17px;font-weight:700;flex:1}
+.status{font-size:11px;padding:4px 10px;border-radius:12px}
+.status.on{background:#065f46;color:#6ee7b7}
+.status.off{background:#7f1d1d;color:#fca5a5}
+
+/* ── 메인 컨텐츠 ── */
+.main{padding:16px}
+.card{background:#1e293b;border-radius:10px;padding:14px;margin-bottom:12px}
+.card-title{font-size:13px;font-weight:700;color:#94a3b8;margin-bottom:8px}
+
+/* ── 버튼 ── */
+.btn{display:block;width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;text-align:center;margin-bottom:6px}
+.btn-primary{background:#3b82f6;color:#fff}
+.btn-secondary{background:#334155;color:#e2e8f0}
+
+/* ── 상태 메시지 ── */
+.info-box{background:#0f172a;border-radius:6px;padding:10px;font-size:12px;color:#94a3b8}
+</style>
+</head>
+<body>
+
+<!-- ═══ 헤더 ═══ -->
+<div class="header">
+  <span style="font-size:22px">🏭</span>
+  <h1>AI 인식 PoC v2</h1>
+  <span id="statusBadge" class="status off">연결 중...</span>
+</div>
+
+<!-- ═══ 메인 ═══ -->
+<div class="main">
+  <!-- 서버 상태 카드 -->
+  <div class="card">
+    <div class="card-title">📡 서버 상태</div>
+    <div class="info-box" id="serverInfo">서버에 연결 중...</div>
+  </div>
+
+  <!-- 앱 상태 카드 (디버그용, 추후 제거) -->
+  <div class="card">
+    <div class="card-title">🔧 앱 상태</div>
+    <div class="info-box" id="appStateInfo">초기화 중...</div>
+  </div>
+
+  <!-- Phase 2에서 추가될 영역 -->
+  <div id="content"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// 앱 상태 객체 — 전체 흐름에서 공유
+// ═══════════════════════════════════════════
+const appState = {
+  equipment: null,         // 선택된 설비 정보
+  selectedTemplate: null,  // 선택된 검사 템플릿 (ROI 포함)
+  selectedRule: null,      // 선택된 판정 규칙
+  capturedImage: null,     // 촬영된 이미지 (Blob)
+  roi: null,               // ROI 좌표 {x, y, w, h}
+  judgmentType: null,       // 판정 타입 (numeric/signal/color)
+  ocrResult: null,          // OCR 결과
+  judgmentResult: null,     // 판정 결과 (ok/ng/warning)
+};
+
+// ═══════════════════════════════════════════
+// API 호출 유틸 함수
+// ═══════════════════════════════════════════
+const API_BASE = location.origin;  // 같은 서버에서 서빙 시
+
+/**
+ * API 호출 공통 함수
+ * @param {string} path - API 경로 (예: '/health')
+ * @param {object} options - fetch 옵션
+ * @returns {Promise<object>} JSON 응답
+ */
+async function apiCall(path, options = {}) {
+  try {
+    const url = API_BASE + path;
+    const res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+      ...options,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status}: ${text.slice(0, 200)}`);
+    }
+    return await res.json();
+  } catch (e) {
+    console.error(`API 에러 [${path}]:`, e);
+    throw e;
+  }
+}
+
+/**
+ * 파일 업로드용 API 호출 (FormData)
+ * @param {string} path - API 경로
+ * @param {FormData} formData - 업로드 데이터
+ * @returns {Promise<object>} JSON 응답
+ */
+async function apiUpload(path, formData) {
+  try {
+    const url = API_BASE + path;
+    const res = await fetch(url, { method: 'POST', body: formData });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status}: ${text.slice(0, 200)}`);
+    }
+    return await res.json();
+  } catch (e) {
+    console.error(`업로드 에러 [${path}]:`, e);
+    throw e;
+  }
+}
+
+// ═══════════════════════════════════════════
+// 서버 연결 확인
+// ═══════════════════════════════════════════
+async function checkServer() {
+  const badge = document.getElementById('statusBadge');
+  const info = document.getElementById('serverInfo');
+  try {
+    const data = await apiCall('/health');
+    badge.textContent = '연결됨';
+    badge.className = 'status on';
+    info.innerHTML = `✅ ${data.message}<br>버전: ${data.version}`;
+  } catch (e) {
+    badge.textContent = '연결 실패';
+    badge.className = 'status off';
+    info.innerHTML = `❌ 서버 연결 실패<br>${e.message}<br><br>
+      <button class="btn btn-secondary" onclick="checkServer()" style="width:auto;display:inline-block;padding:6px 12px;font-size:12px">재시도</button>`;
+  }
+}
+
+// ═══════════════════════════════════════════
+// 앱 상태 표시 (디버그용)
+// ═══════════════════════════════════════════
+function renderAppState() {
+  const el = document.getElementById('appStateInfo');
+  const entries = Object.entries(appState)
+    .map(([k, v]) => `<span style="color:#64748b">${k}:</span> ${v === null ? '<span style="color:#475569">null</span>' : `<span style="color:#6ee7b7">${typeof v === 'object' ? 'Object' : v}</span>`}`)
+    .join('<br>');
+  el.innerHTML = entries;
+}
+
+// ═══════════════════════════════════════════
+// PWA 서비스워커 등록
+// ═══════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(e => console.log('SW 등록 실패:', e));
+}
+
+// ═══════════════════════════════════════════
+// 초기화
+// ═══════════════════════════════════════════
+checkServer();
+renderAppState();
+</script>
+</body>
+</html>
